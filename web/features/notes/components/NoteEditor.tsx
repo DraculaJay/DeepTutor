@@ -9,7 +9,6 @@ import {
   useSyncExternalStore,
 } from 'react'
 import dynamic from 'next/dynamic'
-import { createPortal } from 'react-dom'
 import type { FavoriteSnapshot } from '@/lib/favorite-content'
 import NoteFavoriteBlock from './NoteFavoriteBlock'
 import {
@@ -44,7 +43,6 @@ import {
   Code,
   Sparkles,
   GripVertical,
-  MoreHorizontal,
   ArrowUp,
   ArrowDown,
   Plus,
@@ -91,11 +89,8 @@ import { listNotes, type NoteBlock, type NotePage, type NoteSuggestion } from '@
 import { apiFetch, apiUrl } from '@/lib/api'
 import { inputRules, InputRule } from '@tiptap/pm/inputrules'
 import { closeHistory } from '@tiptap/pm/history'
-import '@blocknote/core/style.css'
-import './notes.css'
 import NoteMath from './NoteMath'
 import NoteInlineReviews from './NoteInlineReviews'
-import NoteInsertBetween from './NoteInsertBetween'
 import useNoteBlockDrag from './useNoteBlockDrag'
 import { noteFile } from './NoteFile'
 import { noteUpload, activeNoteUploads } from './NoteUpload'
@@ -396,8 +391,6 @@ function Handles({ editor }: { editor: NotesEditor }) {
   const menu = useExtension(SideMenuExtension)
   const block = useExtensionState(SideMenuExtension, { selector: state => state?.block })
   const [open, setOpen] = useState(false)
-  const popup = useRef<HTMLDivElement>(null)
-  const [menuPosition, setMenuPosition] = useState({ left: 8, top: 8 })
   const drag = useNoteBlockDrag(editor)
   const blockId = block?.id
   // Centre the handles on the block's first line of text, whatever its type
@@ -434,7 +427,7 @@ function Handles({ editor }: { editor: NotesEditor }) {
     if (!open) return
     const close = (event: Event) => {
       if (event instanceof KeyboardEvent && event.key !== 'Escape') return
-      if (event instanceof PointerEvent && (handleRoot.current?.contains(event.target as Node) || popup.current?.contains(event.target as Node)))
+      if (event instanceof PointerEvent && handleRoot.current?.contains(event.target as Node))
         return
       setOpen(false)
       menu.unfreezeMenu()
@@ -449,29 +442,51 @@ function Handles({ editor }: { editor: NotesEditor }) {
   if (!block) return null
   return (
     <div ref={handleRoot} className="dt-note-handle">
-      <Tooltip label={t('Drag block')}>
-        <button aria-label={t('Drag block')} className="dt-note-drag-handle"
-          onPointerDown={event => { setOpen(false); drag.start(event, block.id) }}
-          onPointerMove={drag.move} onPointerUp={drag.end} onPointerCancel={drag.cancel} onLostPointerCapture={drag.cancel}>
+      <Tooltip label={t('Add below · Option-click to add above')}>
+        <button
+          aria-label={t('Add block')}
+          onClick={e => {
+            const [next] = editor.insertBlocks(
+              [{ type: 'paragraph' }],
+              block.id,
+              e.altKey ? 'before' : 'after'
+            )
+            if (next) editor.setTextCursorPosition(next.id, 'start')
+            editor.getExtension(SuggestionMenu)?.openSuggestionMenu('/')
+          }}
+        >
+          <Plus size={16} />
+        </button>
+      </Tooltip>
+      <Tooltip label={t('Drag or open block menu')}>
+        <button
+          aria-label={t('Drag or open block menu')}
+          className="dt-note-drag-handle"
+          onPointerDown={event => drag.start(event, block.id)}
+          onPointerMove={drag.move}
+          onPointerUp={drag.end}
+          onPointerCancel={drag.cancel}
+          onLostPointerCapture={drag.cancel}
+          onClick={() => {
+            if (drag.consumeClick()) return
+            if (!open) editor.setTextCursorPosition(block.id, 'start')
+            setOpen(!open)
+            if (!open) menu.freezeMenu()
+            else menu.unfreezeMenu()
+          }}
+        >
           <GripVertical size={16} />
         </button>
       </Tooltip>
-      <Tooltip label={t('Block actions')}>
-        <button aria-label={t('Block actions')} aria-expanded={open} onMouseDown={event => event.preventDefault()}
-          onClick={() => {
-            if (!open) {
-              editor.setTextCursorPosition(block.id, 'start')
-              const rect = handleRoot.current!.getBoundingClientRect()
-              setMenuPosition({ left: Math.max(8, Math.min(rect.left - 208, window.innerWidth - 224)), top: Math.max(8, Math.min(rect.bottom + 4, window.innerHeight - 340)) })
-              menu.freezeMenu()
-            } else menu.unfreezeMenu()
-            setOpen(!open)
-          }}><MoreHorizontal size={16} /></button>
-      </Tooltip>
-      {!open && <NoteInsertBetween editor={editor} blockId={block.id} />}
       {drag.indicator}
-      {open && createPortal(
-        <div ref={popup} className="dt-note-menu dt-note-context-menu" style={menuPosition}>
+      {open && (
+        <div
+          className="dt-note-menu"
+          onMouseLeave={() => {
+            setOpen(false)
+            menu.unfreezeMenu()
+          }}
+        >
           {block.type === 'learning' && block.props.kind !== 'task' && (
             // A generated block shows only its material; asking for another
             // version opens a conversation with the old request to edit.
@@ -657,7 +672,7 @@ function Handles({ editor }: { editor: NotesEditor }) {
           )}
           {editor.schema.blockSchema[block.type as keyof typeof schema.blockSchema].content ===
             'inline' &&
-            (['paragraph', 'heading', 'bulletListItem', 'checkListItem', 'toggleListItem', 'toggleHeading'] as const).map(type => (
+            (['paragraph', 'heading', 'bulletListItem', 'checkListItem'] as const).map(type => (
               <button
                 key={type}
                 onClick={() => {
@@ -672,17 +687,11 @@ function Handles({ editor }: { editor: NotesEditor }) {
                     heading: 'Heading',
                     bulletListItem: 'Bullet list',
                     checkListItem: 'To-do list',
-                    toggleListItem: 'Toggle list',
-                    toggleHeading: 'Toggle heading',
                   }[type]
                 )}
               </button>
             ))}
-          <button onClick={() => {
-            editor.domElement?.dispatchEvent(new CustomEvent('note-sources', { bubbles: true }))
-            setOpen(false); menu.unfreezeMenu()
-          }}><BookOpen size={14} />{t('Reference a source')}</button>
-        </div>, document.body
+        </div>
       )}
     </div>
   )
@@ -816,6 +825,7 @@ export default function NoteEditor({
     },
     [page.id]
   )
+  const renderHandles = useCallback(() => <Handles editor={editor} />, [editor])
   useEffect(() => {
     const retry = (event: Event) => {
       uploadRetry.current = (event as CustomEvent).detail.blockId
@@ -1564,7 +1574,7 @@ export default function NoteEditor({
         />
         <FormattingToolbarController formattingToolbar={Toolbar} />
         <SideMenuController
-          sideMenu={() => <Handles editor={editor} />}
+          sideMenu={renderHandles}
           floatingUIOptions={SIDE_MENU_FLOATING}
         />
         {['/', '、'].map(trigger => (

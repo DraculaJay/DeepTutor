@@ -11,12 +11,16 @@ import { canMoveNoteBlock, findNoteBlock, isNoteToggle, moveNoteBlock, noteDropZ
 type Drop = { id: string; zone: NoteDropZone; x: number; y: number; width: number; height: number }
 export default function useNoteBlockDrag<B extends BlockSchema, I extends InlineContentSchema, S extends StyleSchema>(editor: BlockNoteEditor<B, I, S>) {
   const gesture = useRef<{ id: string; x: number; y: number; moved: boolean; pointer: number; handle: HTMLButtonElement } | null>(null)
+  const suppressClick = useRef(false)
   const pointer = useRef({ x: 0, y: 0 })
   const animation = useRef<number | null>(null)
   const [drop, setDrop] = useState<Drop | null>(null)
   const menu = editor.getExtension(SideMenuExtension)
   const cancel = useCallback(() => {
     const current = gesture.current
+    // Effect cleanup also runs on StrictMode mount replay. With no drag,
+    // unfreezing would hide the menu that has just mounted.
+    if (!current) return
     gesture.current = null
     if (animation.current !== null) cancelAnimationFrame(animation.current)
     animation.current = null
@@ -60,9 +64,15 @@ export default function useNoteBlockDrag<B extends BlockSchema, I extends Inline
     animation.current = requestAnimationFrame(scroll)
   }
   return {
+    consumeClick: () => {
+      const consumed = suppressClick.current
+      suppressClick.current = false
+      return consumed
+    },
     start: (event: PointerEvent<HTMLButtonElement>, id: string) => {
       if (event.button !== 0 || !event.isPrimary || !editor.isEditable) return
       cancel()
+      suppressClick.current = false
       gesture.current = { id, x: event.clientX, y: event.clientY, moved: false, pointer: event.pointerId, handle: event.currentTarget }
       pointer.current = { x: event.clientX, y: event.clientY }
       menu?.freezeMenu()
@@ -76,13 +86,20 @@ export default function useNoteBlockDrag<B extends BlockSchema, I extends Inline
       pointer.current = { x: event.clientX, y: event.clientY }
       if (!current.moved && Math.hypot(event.clientX - current.x, event.clientY - current.y) < 5) return
       if (!current.moved) { current.moved = true; animation.current = requestAnimationFrame(scroll) }
+      suppressClick.current = true
       event.preventDefault()
       setDrop(destination(event.clientX, event.clientY))
     },
     end: (event: PointerEvent<HTMLButtonElement>) => {
       const current = gesture.current
       if (!current || current.pointer !== event.pointerId) return
-      const target = current.moved ? destination(event.clientX, event.clientY) : null
+      if (!current.moved) {
+        // Keep the handle mounted until its following click opens the original menu.
+        gesture.current = null
+        if (current.handle.hasPointerCapture(current.pointer)) current.handle.releasePointerCapture(current.pointer)
+        return
+      }
+      const target = destination(event.clientX, event.clientY)
       if (target) {
         const blocks = moveNoteBlock(editor.document as NoteBlock[], current.id, target.id, target.zone)
         if (blocks) {
