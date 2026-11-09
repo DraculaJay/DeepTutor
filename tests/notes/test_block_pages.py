@@ -379,3 +379,22 @@ def test_cards_drop_stray_text_and_tell_the_model_what_they_hold():
     assert "content" not in timeline
     assert "1771 — Priestley" in card_content(timeline)
     assert card_content(block()) == ""
+
+
+def test_spatial_and_nested_toggle_state_survive_storage_reopen(store):
+    doc = page(store)
+    original = [
+        {"id": "layout", "type": "noteColumns", "props": {"mode": "wrap"}, "children": [
+            {"id": "left", "type": "noteColumn", "props": {}, "children": [block("image-note", "Original source")]},
+            {"id": "right", "type": "noteColumn", "props": {}, "children": [
+                {**block("toggle", "Title"), "type": "toggleHeading", "props": {"collapsed": True, "level": 2}, "children": [
+                    {**block("nested", "Nested"), "type": "toggleListItem", "props": {"collapsed": False}, "children": [
+                        {**block("answer", "Untouched answer"), "props": {"sourceId": "lecture", "sourceUrl": "/materials/original"}}
+                    ]}
+                ]}
+            ]}
+        ]}
+    ]
+    store.update_document(doc.id, blocks=original, expected_revision=0)
+    reopened = CoWriterStorage(store.path_service)
+    assert reopened.load_document(doc.id).blocks == original

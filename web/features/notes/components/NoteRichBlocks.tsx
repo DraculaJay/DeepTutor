@@ -1,6 +1,7 @@
 'use client'
 
 import { useEffect, useState } from 'react'
+import { createBlockSpec, createToggleFrame, defaultBlockSpecs, defaultToggledState, type BlockImplementation } from '@blocknote/core'
 import { createReactBlockSpec, createReactInlineContentSpec } from '@blocknote/react'
 import { useTranslation } from 'react-i18next'
 import {
@@ -49,6 +50,36 @@ export const callout = createReactBlockSpec(
   }
 )
 
+// Keep BlockNote's toggle keyboard behavior, but save the state with the note.
+const toggleBase = defaultBlockSpecs.toggleListItem
+const toggleProps = { ...toggleBase.config.propSchema, collapsed: { default: false } } as const
+export const toggleListItem = createBlockSpec<'toggleListItem', typeof toggleProps, 'inline'>(
+  { ...toggleBase.config, propSchema: toggleProps },
+  // The original implementation uses only its unchanged default props.
+  { ...(toggleBase.implementation as unknown as BlockImplementation<'toggleListItem', typeof toggleProps, 'inline'>),
+    renderFrame(block, editor) {
+      let collapsed = block.props.collapsed
+      defaultToggledState.set(block, !collapsed)
+      const frame = createToggleFrame(block, editor, {
+        get: () => !collapsed,
+        set: (item, open) => {
+          collapsed = !open
+          defaultToggledState.set(item, open)
+          queueMicrotask(() => {
+            const current = editor.getBlock(item.id)
+            if (current && current.props.collapsed !== !open) editor.updateBlock(item.id, { props: { collapsed: !open } })
+          })
+        },
+      })
+      return { ...frame, update(updated) {
+        // Undo/redo can change saved props without a button click.
+        if (updated.props.collapsed !== collapsed) return false
+        return frame.update(updated)
+      } }
+    },
+  }, toggleBase.extensions
+)
+
 export const toggleHeading = createReactBlockSpec(
   {
     type: 'toggleHeading',
@@ -79,6 +110,12 @@ export const toggleHeading = createReactBlockSpec(
             <ChevronRight size={17} />
           </button>
           <div className="dt-note-toggle-body" ref={slotRef} />
+          {!block.props.collapsed && !block.children.length && editor.isEditable && <button className="dt-note-toggle-add"
+            contentEditable={false} onMouseDown={event => event.preventDefault()} onClick={() => {
+              const updated = editor.updateBlock(block.id, { children: [{}] })
+              editor.setTextCursorPosition(updated.children[0].id, 'start')
+              editor.focus()
+            }}>{t('Add block')}</button>}
         </div>
       )
     },
@@ -92,11 +129,11 @@ export const noteColumns = createReactBlockSpec(
   {
     type: 'noteColumns',
     content: 'none',
-    propSchema: {},
+    propSchema: { mode: { default: 'columns', values: ['columns', 'wrap'] as const } },
     layoutOnly: true,
     children: { allow: ['noteColumn'], min: 2, dissolve: true },
   },
-  { renderFrame: ({ slotRef }) => <div className="dt-note-columns" ref={slotRef} /> }
+  { renderFrame: ({ block, slotRef }) => <div className="dt-note-columns" data-layout={block.props.mode} ref={slotRef} /> }
 )
 export const tableOfContents = createReactBlockSpec(
   { type: 'tableOfContents', content: 'none', propSchema: {} },

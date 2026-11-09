@@ -1957,3 +1957,30 @@
 .dt-note-upload p[role='alert'] {
   color: var(--destructive, #dc2626);
 }
+
+
+/* Quiet, independent gutter controls. Insertion never adds spacer blocks. */
+.dt-note-insert-between{position:fixed;display:flex;align-items:center;height:20px;gap:7px;pointer-events:none;z-index:75;color:var(--muted-foreground)}
+.dt-note-insert-between button{display:grid;place-items:center;width:20px;height:20px;flex:none;pointer-events:auto;border-radius:50%;opacity:.65;background:var(--background);transition:background 120ms,color 120ms}
+.dt-note-insert-between button:hover,.dt-note-insert-between button:focus-visible{opacity:1;color:#3c9478;background:color-mix(in srgb,#69b99b 15%,var(--background))}
+.dt-note-insert-between span{height:1px;flex:1;background:#69b99b;opacity:0;transition:opacity 120ms}.dt-note-insert-between:has(button:hover) span{opacity:.45}
+.dt-note-context-menu{position:fixed;z-index:1100;max-height:min(320px,calc(100vh - 16px));width:208px}
+.dt-note-drop-preview{position:fixed;z-index:1050;pointer-events:none;border-radius:3px;background:#70b99a;transition:width 70ms,height 70ms;box-shadow:0 0 0 2px #70b99a18}
+.dt-note-drop-preview.is-wrap,.dt-note-drop-preview.is-inside{background:#70b99a0b;outline:2px solid #70b99a88;box-shadow:0 3px 12px #356e5316;border-radius:7px}
+.dt-note-drop-preview>span{position:absolute;left:0;bottom:calc(100% + 5px);padding:2px 7px;border-radius:4px;white-space:nowrap;background:#e6f3ec;color:#326d55;font-size:11px;box-shadow:0 1px 5px #356e5312}
+.dt-note-toggle{position:relative}.dt-note-toggle>.dt-note-toggle-add{position:absolute;left:29px;top:auto;bottom:0;margin:0;padding:3px 8px;color:var(--muted-foreground);font-size:12px}
+.dt-note-toggle:has(>.dt-note-toggle-add){padding-bottom:26px}
+.dt-note-editor .bn-toggle-button svg{width:15px;height:15px}.dt-note-editor .bn-toggle-button{border-radius:4px;transition:background 120ms}.dt-note-editor .bn-toggle-button:hover{background:var(--secondary)}
+/* A wrap is the same saved pair of columns, rendered with a floated leading block. */
+.dt-note-columns[data-layout='wrap']{display:flow-root}
+.dt-note-columns[data-layout='wrap']>[data-node-view-content-react]{display:contents}
+.dt-note-columns[data-layout='wrap']>[data-node-view-content-react]>.node-noteColumn{display:contents}
+.dt-note-columns[data-layout='wrap']>[data-node-view-content-react]>.node-noteColumn:first-child{display:block;float:left;width:40%;margin:0 24px 12px 0}
+.dt-note-columns[data-layout='wrap']>[data-node-view-content-react]>.node-noteColumn:last-child .dt-note-column,
+.dt-note-columns[data-layout='wrap']>[data-node-view-content-react]>.node-noteColumn:last-child .dt-note-column>[data-node-view-content-react],
+.dt-note-columns[data-layout='wrap']>[data-node-view-content-react]>.node-noteColumn:last-child .dt-note-column>[data-node-view-content-react]>.bn-block-group,
+.dt-note-columns[data-layout='wrap']>[data-node-view-content-react]>.node-noteColumn:last-child .dt-note-column>[data-node-view-content-react]>.bn-block-group>.bn-block-outer,
+.dt-note-columns[data-layout='wrap']>[data-node-view-content-react]>.node-noteColumn:last-child .dt-note-column>[data-node-view-content-react]>.bn-block-group>.bn-block-outer>.bn-block{display:contents}
+.dt-note-columns[data-layout='wrap']>[data-node-view-content-react]>.node-noteColumn:last-child .dt-note-column>[data-node-view-content-react]>.bn-block-group>.bn-block-outer>.bn-block>.bn-block-content{display:block}
+@media(max-width:700px){.dt-note-columns[data-layout='wrap']>[data-node-view-content-react]>.node-noteColumn:first-child{float:none;width:100%;margin:0 0 12px}}
+@media(prefers-reduced-motion:reduce){.dt-note-drop-preview,.dt-note-insert-between button{transition:none}}
