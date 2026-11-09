@@ -48,9 +48,13 @@ int serve(const std::string& path,Worker& worker,HostRuntime* host) {
       if(type==ipc::MessageType::shutdown) {send(ipc::MessageType::status,id,"{}");break;}
       if(type==ipc::MessageType::result && host) {host->deliver(id,std::move(body));continue;}
       // Type 13 extends the existing frame protocol with an explicit snapshot.
-      if(static_cast<int>(type)==13) {
+      if(type==ipc::MessageType::snapshot) {
         auto frame=worker.snapshot(); if(!frame) throw std::runtime_error("No captured frame yet");
         send(ipc::MessageType::result,id,encode_media(*frame).dump());continue;
+      }
+      if(type==ipc::MessageType::learning_context) {
+        const auto revision=worker.set_learning_context(std::move(body));
+        send(ipc::MessageType::status,id,nlohmann::json{{"ok",true},{"context_revision",revision}}.dump());continue;
       }
       if(type==ipc::MessageType::start && !worker.start_monitoring(make_screen_capture(),make_audio_tap())) throw std::runtime_error("Cannot start capture");
       if(type==ipc::MessageType::stop) worker.stop_monitoring();

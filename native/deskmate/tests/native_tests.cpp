@@ -249,6 +249,11 @@ class RecordingRuntime final : public jarvis::IOmniRuntime {
       return item.first >= (std::uint64_t{1} << 63U);
     });
   }
+  bool has_shared_context(const std::string& marker, bool duplex) {
+    std::lock_guard lock(mutex_);
+    if (duplex) return std::ranges::any_of(duplex_instructions_, [&](const auto& s) { return s.find(marker) != std::string::npos; });
+    return std::ranges::any_of(prompts_, [&](const auto& p) { return p.first >= (std::uint64_t{1} << 63U) && p.second.find(marker) != std::string::npos; });
+  }
   bool received_duplex_context() {
     std::lock_guard lock(mutex_);
     return duplex_had_context_ && duplex_instruction_.find("绿灯") != std::string::npos;
@@ -561,6 +566,21 @@ int main() {
   recording_ptr->wait_request(22);
   require(!recording_ptr->had_context(22), "stopping monitoring clears capture context");
   worker.stop();
+  auto shared_runtime = std::make_unique<RecordingRuntime>();
+  auto* shared = shared_runtime.get();
+  Worker notebook(std::move(shared_runtime));
+  require(notebook.start("test"), "notebook worker starts");
+  require(notebook.set_learning_context(R"({"note_title":"context-v1"})") == 1, "learning context revision advances");
+  require(notebook.start_monitoring(std::make_unique<TestDesktopCapture>(), std::make_unique<TestAudioCapture>(), std::chrono::milliseconds(10)), "notebook capture starts");
+  require(notebook.start_duplex("note", "Observe the current lesson"), "notebook duplex starts");
+  for (int i=0; i<500 && !shared->has_shared_context("context-v1",false); ++i) std::this_thread::sleep_for(std::chrono::milliseconds(2));
+  require(shared->has_shared_context("context-v1",false), "structured perception receives the saved note context");
+  require(shared->has_shared_context("context-v1",true), "duplex receives the same note context");
+  notebook.set_learning_context(R"({"note_title":"context-v2"})");
+  for (int i=0; i<500 && !shared->has_shared_context("context-v2",true); ++i) std::this_thread::sleep_for(std::chrono::milliseconds(2));
+  require(shared->has_shared_context("context-v2",true), "existing duplex maintenance applies changed note context");
+  notebook.stop_monitoring();
+  notebook.stop();
 #endif
   std::cout << "all native tests passed\n";
 }

@@ -1438,6 +1438,7 @@ class AgenticLoopPipeline:
         task_dir = Path(runtime_workspace.output_dir) if runtime_workspace is not None else task_dir
         if tool_name == "screen_context":
             kwargs["_deskmate_session_id"] = context.session_id
+            kwargs["_deskmate_note_document_id"] = context.metadata.get("note_document_id", "")
         if tool_name in {"rag", "preprint"}:
             if tool_name == "rag":
                 kwargs.setdefault("mode", "hybrid")

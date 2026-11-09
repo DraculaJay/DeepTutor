@@ -270,6 +270,9 @@ class TurnExecutor:
             persist_user_message = bool(payload.get("persist_user_message", True))
             is_regenerate = bool(payload.get("regenerate", False))
             raw_user_content = str(payload.get("content", "") or "")
+            if payload.get("note_document_id"):
+                from deeptutor.deskmate.service import sync_note_turn
+                await sync_note_turn(str(payload["note_document_id"]), session_id, question=raw_user_content)
             # Edit-branching tip: when the FE includes ``parent_message_id``
             # (even as ``null``), the new user message attaches at that
             # exact parent — creating a sibling of any existing children
@@ -1226,6 +1229,9 @@ class TurnExecutor:
                 assistant_events,
                 pending_done_event,
             )
+            if turn_status == "completed" and payload.get("note_document_id"):
+                from deeptutor.deskmate.service import sync_note_turn
+                await sync_note_turn(str(payload["note_document_id"]), session_id, answer=assistant_content)
             failure_code, retryable = _resolve_turn_failure_metadata(assistant_events)
             if pending_done_event is None:
                 pending_done_event = StreamEvent(

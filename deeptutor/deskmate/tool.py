@@ -11,7 +11,7 @@ class ScreenContextTool(BaseTool):
     async def execute(self, **kwargs):
         from .service import current_service
         service = current_service()
-        if not service or not service.native_connected or kwargs.get('_deskmate_session_id') != service.session_id:
+        if not service or not service.native_connected or not service.matches_context(kwargs.get('_deskmate_session_id', ''), kwargs.get('_deskmate_note_document_id', '')):
             return ToolResult(content='Perception is not active for this learning session.')
         context = dict(service.snapshot)
         context.update(capture_ready=service.capture_ready, error=service.error)

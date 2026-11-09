@@ -26,6 +26,8 @@ enum class MessageType : std::uint16_t {
   configure_game = 10,
   start_duplex = 11,
   stop_duplex = 12,
+  snapshot = 13,
+  learning_context = 14,
 };
 
 enum class StatusCode : std::uint32_t {

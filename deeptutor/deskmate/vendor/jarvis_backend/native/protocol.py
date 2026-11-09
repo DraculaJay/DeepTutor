@@ -31,6 +31,7 @@ class MessageType(IntEnum):
     START_DUPLEX = 11
     STOP_DUPLEX = 12
     SNAPSHOT = 13
+    LEARNING_CONTEXT = 14
 
 
 class StatusCode(IntEnum):

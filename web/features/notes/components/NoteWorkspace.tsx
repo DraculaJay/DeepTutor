@@ -28,6 +28,7 @@ import type { NoteAsk, NoteEditorHandle } from './NoteEditor'
 import NotePageTree from './NotePageTree'
 import './note-workspace.css'
 import NotePageHead from './NotePageHead'
+import NotePerception from './NotePerception'
 import NoteTopBar, { type NoteSaveStatus } from './NoteTopBar'
 import NoteOutline from './NoteOutline'
 import { blockLineCenter } from './NoteThreadMarkers'
@@ -588,6 +589,14 @@ export default function NoteWorkspace({
         onInsertFavorite={() => setFavorites(true)}
         onExport={format => void exportFile(format)}
       />
+      {!embedded && page && <NotePerception pageId={docId} flush={flush} onAsk={async prompt => {
+        if (!threads.open) {
+          const previous = threads.threads.at(-1);
+          if (previous) await threads.openThread(previous.session_id);
+          else { askAtCursor(prompt); return; }
+        }
+        threads.prefillQuestion(prompt);
+      }} onSuggestions={() => { refreshSuggestions(); void threads.refresh(); }} />}
       {error && (
         <div role="alert" className="dt-note-banner is-error">
           <span className="flex-1">{error}</span>

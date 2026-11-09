@@ -30,6 +30,7 @@ class Worker {
   void cancel(std::uint64_t request_id) noexcept;
   void set_game_profile(std::string name, std::string prompt);
 #if defined(_WIN32) || defined(__APPLE__)
+  std::uint64_t set_learning_context(std::string context);
   bool start_duplex(std::string session_id, std::string instruction);
   void stop_duplex() noexcept;
   bool start_monitoring(std::unique_ptr<IDesktopCapture> desktop,
@@ -75,6 +76,8 @@ class Worker {
   std::atomic_uint64_t duplex_sequence_{0};
   std::string duplex_session_id_{};
   std::string duplex_instruction_{};
+  std::string learning_context_{};
+  std::uint64_t learning_context_revision_{};
   std::deque<RecentPerception> recent_perceptions_{};
   std::string previous_scene_{};
   std::string game_profile_name_{};

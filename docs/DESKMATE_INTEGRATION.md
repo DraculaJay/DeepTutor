@@ -77,3 +77,18 @@ The incomplete reference vendor tree genuinely lacked model implementation heade
 - Course summary quality remains model-dependent; the real text smoke test is not the seven-part model benchmark in LOCAL_MODEL_RESEARCH.md.
 
 See [MACOS_SETUP.md](MACOS_SETUP.md) for copyable install/build/start commands. The working branch has uncommitted source changes, intentionally without Git checkpoints because the user explicitly prohibited committing.
+
+
+## Note-scoped perception (2026-11-09)
+
+The first note-workspace slice connects Jarvis to the existing Co-Writer Block page; it does not replace the editor, Provider registry, document store, sessions or review workflow. The original standalone AI Deskmate checkout and its data remain untouched.
+
+- A note page has a small **同桌感知** bar. Start flushes the page, creates/reuses an ordinary DeepTutor note conversation, and starts the existing Native Worker. No first chat message is required.
+- The shared context contains bounded saved note text, its parent-page path, the current question, selected passage when available, and the last completed answer. It is refreshed at start, before a note question, after a completed answer, and by **同步笔记**. Reopening capture restores recent question/answer text from the existing session store. It does not mirror every edit or the entire conversation history continuously.
+- Additive RPC command 14 carries UTF-8 learning-context JSON through Jarvis's existing framing. The Worker appends it as source data to structured perception and Duplex instructions. Changes reuse the existing Duplex maintenance thread, retaining the LLM weights; stale answers from another note thread cannot replace a newer question's focus. Existing protocol numbers and upstream runtime pin remain unchanged.
+- The note agent automatically receives the same page's latest perception snapshot; `screen_context` can obtain a fresh image. Multiple question threads on the same note can use its shared perception. Another note or unrelated chat cannot access the active page's capture. Switching pages requires stopping the previous capture explicitly.
+- **问当前画面** and **整理成笔记** reuse the open/recent page conversation. Notes are proposed through existing `note_read` / `screen_context` / `note_suggest`; the learner accepts or ignores them in the existing inline review. Capturing never overwrites the page body.
+
+Validation: 7 Python integration/boundary tests passed; TypeScript passed; native CTest passed, including note context reaching both structured perception and Duplex and changed context reaching a rebuilt Duplex session. Real Electron verification started native Omni from a Block page, answered a note-content question through local A3B, observed question and answer acknowledgements in the Native Worker, rejected another page's sync, and preserved the document revision. A second real page turn produced a pending insert suggestion through all three existing note/screen tools; the suggestion remains unaccepted for inspection. Frontend ESLint reported no errors and existing-style literal-text localization warnings in the new control.
+
+The app still opens at its existing home: note-first startup, migration of the original editor/workspace and the Jarvis avatar are subsequent slices, per the user's request to connect perception first. Long-term Course memory, audio transcription quality, prolonged course acceptance and native PCM playback retain the limitations documented above.

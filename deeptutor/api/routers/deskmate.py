@@ -2,7 +2,7 @@
 from fastapi import APIRouter, Depends, HTTPException, Request
 from pydantic import BaseModel, Field
 from deeptutor.services.llm.exceptions import LLMError
-from deeptutor.deskmate.service import current_service, start_service
+from deeptutor.deskmate.service import current_service, start_service, start_note_service
 
 
 def local_desktop(request: Request):
@@ -14,7 +14,8 @@ router = APIRouter(dependencies=[Depends(local_desktop)])
 
 
 class StartRequest(BaseModel):
-    session_id: str = Field(min_length=1, max_length=128)
+    session_id: str | None = Field(default=None, min_length=1, max_length=128)
+    note_document_id: str | None = Field(default=None, pattern=r"^[0-9a-f]{8,32}$")
 
 
 @router.get('/status')
@@ -33,7 +34,12 @@ async def status():
 @router.post('/start')
 async def start(body: StartRequest):
     try:
-        await start_service(body.session_id)
+        if body.note_document_id:
+            await start_note_service(body.note_document_id, body.session_id)
+        elif body.session_id:
+            await start_service(body.session_id)
+        else:
+            raise ValueError("Choose a notebook page or learning conversation first")
         return await status()
     except (RuntimeError, ValueError, OSError, LLMError) as exc:
         raise HTTPException(409, str(exc)) from exc
@@ -63,3 +69,15 @@ async def events():
     service = current_service()
     return [{'id': e.id, 'topic': e.topic, 'payload': e.payload, 'occurred_at': e.occurred_at.isoformat()}
             for e in service.events.history() if e.topic != 'host.infer'] if service else []
+
+
+@router.post('/context')
+async def sync_context(body: StartRequest):
+    service = current_service()
+    if not service or not service.native_connected or not body.note_document_id or not service.matches_context(note_document_id=body.note_document_id):
+        raise HTTPException(409, 'Perception is not active for this notebook page')
+    try:
+        await service.sync_note_context()
+        return await status()
+    except (RuntimeError, ValueError, OSError, TimeoutError) as exc:
+        raise HTTPException(409, str(exc)) from exc

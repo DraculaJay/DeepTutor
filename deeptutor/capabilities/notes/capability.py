@@ -89,6 +89,10 @@ class NotesCapability:
             "Learning blocks use type=learning with props kind, prompt, markdown. Supported kinds: quiz, flashcards, mermaid, timeline, research, audio. "
             "Use available tools for research, quiz and visualization."
         )
+        from deeptutor.deskmate.service import note_perception_context
+        shared = note_perception_context(context.metadata["note_document_id"])
+        if shared:
+            instruction += "\n\n" + shared
         anchor = thread_anchor_context(
             get_co_writer_storage(),
             context.metadata["note_document_id"],

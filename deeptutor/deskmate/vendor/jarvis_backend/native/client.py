@@ -79,6 +79,7 @@ class NamedPipeNativeClient(NativeClient):
 
     _METHODS = {
         "snapshot": MessageType.SNAPSHOT,
+        "set_learning_context": MessageType.LEARNING_CONTEXT,
         "start_monitoring": MessageType.START,
         "resume_monitoring": MessageType.START,
         "pause_monitoring": MessageType.STOP,
@@ -144,7 +145,7 @@ class NamedPipeNativeClient(NativeClient):
         except KeyError as exc:
             raise ValueError(f"unsupported native command: {method}") from exc
         request_id = next(self._ids)
-        if message_type == MessageType.SUBMIT:
+        if message_type in {MessageType.SUBMIT, MessageType.LEARNING_CONTEXT}:
             body = payload.get("text", "")
         elif message_type == MessageType.CONFIGURE_GAME:
             name = str(payload.get("name", ""))[:80]

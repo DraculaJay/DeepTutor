@@ -544,6 +544,8 @@ export function useNoteThreads({
     bound,
     hasMessages: bound && state.messages.length > 0,
     prefill,
+    prefillQuestion: (text: string) => setPrefill({ id: Date.now(), text }),
+    refresh,
     send,
     openThread,
     startThread,
