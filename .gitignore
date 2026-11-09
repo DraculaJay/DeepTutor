@@ -10,7 +10,9 @@ data/
 /multi-user/
 # Developer and agent documentation is tracked in docs-for-dev/.
 # Keep obsolete local notes and downloaded references out of the repository.
-/docs/
+/docs/*
+!/docs/DESKMATE_INTEGRATION.md
+!/docs/MACOS_SETUP.md
 /docs-for-use/
 /docs-for-user/
 /design-qa.md
@@ -294,3 +296,6 @@ dmypy.json
 *.mp3
 *.wav
 *.ogg
+
+# Local native runtime build trees (including patched upstream and binaries).
+/native/deskmate/build-*/

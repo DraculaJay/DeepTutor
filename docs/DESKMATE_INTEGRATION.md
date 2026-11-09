@@ -1,0 +1,79 @@
+# AI Deskmate integration prototype
+
+Implementation date: 2026-11-09, Asia/Shanghai. Host baseline: DeepTutor `60fb3bdfddb30b7740c7ce3bd9b28d908f2af6db`, branch `deskmate/integration-mvp`; Jarvis reference `dd8fbf97a3e0f96239a0a465398654be68e88e15`. Both working trees were clean before implementation. Jarvis remains unchanged. No commit or push was performed.
+
+The root and DeepTutor AGENTS.md and all three ai-deskmate-research documents were read. The current implementation prompt takes precedence over older research suggestions such as making MiniCPM mandatory or downloading weights on first run.
+
+## Actual structure
+
+```text
+DeepTutor Electron → existing supervisor / SourceRuntime / ProcessGroup
+  ├─ existing FastAPI backend
+  │    └─ DeskmateService → reused Jarvis OrchestrationService / EventBus / policies
+  │         ├─ existing DeepTutor BYOK completion + existing STT service
+  │         ├─ existing Session / TimedMedia / Attachments / Co-Writer / Journal / Memory
+  │         └─ private Unix socket → native Worker / LatestOnlyScheduler
+  │              ├─ ScreenCaptureKit → VideoFrame
+  │              ├─ Core Audio Process Tap → system-output PcmBlock
+  │              ├─ NSWorkspace → foreground application
+  │              └─ optional existing RealOmniRuntime → llama.cpp-omni / Metal
+  └─ existing Next.js UI + small AI Deskmate control panel
+```
+
+The Python control plane runs inside the existing FastAPI process. This avoids a second HTTP service, credentials API and provider registry. The backend's native subprocess inherits the supervisor-managed process group. A FastAPI shutdown hook also closes it gracefully. No Jarvis Electron shell, launcher, model downloader or second desktop lifecycle was imported.
+
+### Reuse and adaptation
+
+- `deeptutor/deskmate/vendor/jarvis_backend`: copied relevant upstream Python modules, namespaced imports. OrchestrationService gains optional store injection. SceneHysteresis, CourseSceneStabilizer, BarragePolicy, EventBus, Lifecycle, prompts, transcript delta/cleanup and course recognition continue to execute upstream logic.
+- `native/deskmate`: reused native Worker, LatestOnlyScheduler, FrameChangeDetector, ScreenIdleMonitor, audio downmix/resampling, runtime interface, original Omni adapter, binary protocol and tests. The macOS capture factories replace platform capture only. Monitoring/duplex code is compiled on Apple, and NSWorkspace replaces foreground-window checks in this macOS target.
+- Frame header, version, CRC, existing message IDs and payload structure are retained. SNAPSHOT=13 is an explicit extension. Host-runtime inference uses a `host.infer` native event and a result frame. Native uint64 IDs are represented as decimal strings inside JSON, preventing loss through JavaScript numeric conversion.
+- The normal runtime sends images through DeepTutor `complete(image_data=...)` and course audio through `transcribe_audio`. It never implements another provider or API-key manager. Native Omni is opt-in via an existing model directory and retains its original model-specific layout checks. Native duplex is available only on that optional runtime, not advertised for all BYOK models.
+- The current screen tool is registered in the existing module/tool registry and mounted while capture is active in the current workspace. Its server-supplied session ID must match capture's learning session. A current image uses ToolResult.model_message, so raw screen pixels are not appended to durable chat messages. Passive events are not continuously written into chat history.
+
+### Data ownership
+
+The single course identity is the selected DeepTutor session ID. Timed-media material IDs are stable hashes derived from that ID, not an independent Jarvis course ID. The existing session preferences retain `deskmate_material_id` and the completed summary's `deskmate_summary_document_id`.
+
+`HostCourses` implements the existing Jarvis course interface on TimedMediaStore. It does not create Jarvis state.json, transcript.md, a separate course database or desktop exports. Transcript cues retain system-audio provenance and capture-window bounds; these are **not word-aligned ASR timestamps**. Keyframes go into DeepTutor's existing attachment store and retain capture timestamps and source notes. The recent transcript is visible in the control panel; summaries link to the existing Co-Writer page.
+
+Only a bounded, transient activity ring replaces Jarvis's independent MemoryStore. A finished course writes its summary/links to the existing LearningJournal and one `chat/course_completed` Memory TraceEvent. No new long-term memory database or surface is introduced. Existing consolidation and memory management remain unchanged. RAG indexing is not automatic; the existing knowledge workflow can ingest selected notes/materials.
+
+Stopping capture clears live observation freshness. It preserves recordings and marks interrupted summaries as retryable failures. Summary generation uses the teaching provider in an asynchronous task; it does not submit a text task to the native Omni scheduler. A zero-content model response is an explicit failure, not an empty successful note.
+
+### UI, permissions and lifecycle
+
+The original DeepTutor interface is preserved. The small chat panel provides Start/Stop, separate screen/audio readiness, current scene/app/course, Jarvis companion/barrage text, transcript preview, summary link and actionable errors. User microphone input remains in the existing chat voice flow. System course audio cannot enter the user-command path. Full upstream floating pet/barrage windows and character animation were not migrated.
+
+Screen capture and system audio start only after the user starts perception. The native adapter uses public ScreenCaptureKit/CoreAudio/NSWorkspace APIs; no private TCC API or automatic permission grant is used. A silent output device may not deliver audio callbacks until playback begins, so the UI distinguishes waiting for audio from screen readiness. The existing macOS app metadata gains capture purpose descriptions and retains microphone declarations.
+
+The desktop supports an explicit development source launch through its existing supervisor. The existing arm64 bundle builder includes the prebuilt worker; model weights are excluded. Release signing/notarization and all-platform release requirements remain the original project's responsibility.
+
+## Actual validation
+
+| Check | Result and boundary |
+|---|---|
+| Python environment and backend | Full existing dependency set installed in `.venv`; real FastAPI startup completed; `/health/ready`, `/api/deskmate/status`, `/api/deskmate/events` returned 200 in an isolated profile |
+| Next.js production build | Passed, including TypeScript and 46 prerendered pages |
+| Desktop checks | `npm run check` passed; existing desktop suite: 23 passed after rerunning outside the socket-restricted sandbox |
+| Python targeted checks | 37 passed: 5 new adapter unit tests + existing video-learning and tool-registry tests. New adapter tests use explicit synthetic fixtures and are not evidence of real model/capture behavior |
+| Native build/tests | Apple Silicon native worker built; reused native suite passed, including the now-enabled Apple monitoring/duplex **fixture** tests |
+| Real process/IPC | Real worker spawned; ping returned the actual foreground app; binary Unix socket round-trip passed with an explicitly labelled protocol fixture; exit code 0, socket directory removed; stop is idempotent |
+| Real screen capture | ScreenCaptureKit delivered actual 1280×827 BGRA frames; no captured screen was sent to a cloud service |
+| Real system audio | Local, quiet synthetic three-second tone played through system output; Core Audio tap delivered nonzero PCM. Measured mean-square sample power was approximately 0.000175 and 0.000130 in captured windows; subsequent silent window was 0. Native capture process exited 0 |
+| Optional Omni build | Full checksum-pinned source obtained using Jarvis's existing acquisition script; existing text-prefill patch applied only to build-local copy. RealOmniRuntime + llama.cpp-omni + Metal executable compiled and linked. No model weights downloaded/loaded; duplex inference not runtime-tested |
+| Real teaching/provider + persistence | Existing local `qwen3:30b-a3b-instruct-2507-q4_K_M` called through DeepTutor's actual provider using synthetic lesson text. Nonempty teaching explanation and course summary returned; actual Co-Writer, journal and Memory writes completed in an isolated test home. This validates transport/storage, not a teaching-quality benchmark |
+| Real desktop UI | Electron launched the original DeepTutor UI through its supervisor; the AI Deskmate panel and controls were observed in the native app. Smoke-test processes were then closed; backend graceful shutdown completed and no test supervisor/frontend/capture worker remained |
+
+An initial real call to local thinking model `qwen3.6:35b-a3b` exhausted a small output budget and returned no content. The resulting empty-summary handling bug was fixed and the successful provider test used the installed non-thinking Instruct model. No cloud-tagged Ollama model was used, and no weights were downloaded.
+
+The incomplete reference vendor tree genuinely lacked model implementation headers. This was resolved for the optional build by fetching the already pinned, checksum-verified **source** into a separate build cache; the reference checkout was not edited. OpenSSL was disabled for local Omni inference to avoid introducing a Homebrew dylib dependency into the worker.
+
+## Remaining validation and limitations
+
+- The desktop test profile starts with no provider/STT credentials. Configure existing DeepTutor Language Models and Voice/STT before using default BYOK perception. No existing user credentials were copied into the test profile.
+- Real STT-provider transcription, native-Omni model loading/full duplex, and the complete live-course → perception model → user question → transcript/keyframe → summary sequence have not been verified together. Fixture adapter tests and independent capture/provider smoke tests do not count as that end-to-end pass.
+- Real course scene/recognition accuracy, long-duration thermal/performance behavior, microphone conversation, packaging into a signed/notarized DMG and all-platform release validation remain unverified. No release was published.
+- A recording's transcript times are capture-window bounds, and the native worker retains upstream latest-only scheduling/audio-window limits. This is a prototype, not a lossless lecture recorder or word-level subtitle aligner.
+- Course summary quality remains model-dependent; the real text smoke test is not the seven-part model benchmark in LOCAL_MODEL_RESEARCH.md.
+
+See [MACOS_SETUP.md](MACOS_SETUP.md) for copyable install/build/start commands. The working branch has uncommitted source changes, intentionally without Git checkpoints because the user explicitly prohibited committing.

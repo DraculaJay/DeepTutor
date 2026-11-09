@@ -175,8 +175,8 @@ async function stopWorker() {
   });
 }
 
-async function launchRuntime(installed) {
-  const config = bundleConfig(installed.destination, runtimeHome, installed.manifest.runtimeId);
+async function launchRuntime(installed, sourceConfig = null) {
+  const config = sourceConfig || bundleConfig(installed.destination, runtimeHome, installed.manifest.runtimeId);
   const child = fork(path.join(sourceDirectory, 'supervisor.mjs'), [], {
     execPath: config.nodePath, stdio: ['ignore', 'ignore', 'pipe', 'ipc'],
     env: { ...process.env, ELECTRON_RUN_AS_NODE: '' },
@@ -197,7 +197,7 @@ async function launchRuntime(installed) {
       status({ phase: 'error', step: null, message: t('workerExited', { code }) });
       if (!ready) reject(new Error(state.message));
     });
-    child.send({ type: 'start', config, logPath, cachePath: path.join(userRoot, 'cache', installed.manifest.runtimeId) });
+    child.send({ type: 'start', config, logPath, cachePath: path.join(userRoot, 'cache', installed?.manifest.runtimeId ?? 'deskmate-source') });
   });
 }
 
@@ -229,6 +229,17 @@ async function boot() {
   try {
     status({ phase: 'starting', step: 'starting' });
     await stopWorker();
+    if (!app.isPackaged && process.env.DEEPTUTOR_DESKMATE_SOURCE) {
+      const ready = await launchRuntime(null, {
+        schemaVersion: 1, mode: 'source', sourcePath: path.resolve(process.env.DEEPTUTOR_DESKMATE_SOURCE),
+        pythonPath: process.env.DEEPTUTOR_PYTHON, nodePath: process.env.DEEPTUTOR_NODE, runtimeHome,
+      });
+      if (quitting) return;
+      watchInterface();
+      await refreshInterface();
+      await openContent(ready.url);
+      return;
+    }
     await recoverInterruptedUpgrade();
     const saved = await readJSON(activeFile);
     const manifestFile = saved ? path.join(userRoot, 'runtimes', verifyManifest(saved, publicKey).runtimeId, 'installed.json') : seed;

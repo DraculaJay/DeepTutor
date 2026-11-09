@@ -6,7 +6,8 @@
   "optional": [],
   "paths": [
     "deeptutor/knowledge/manifest.py",
-    "deeptutor/knowledge/kb_types.py"
+    "deeptutor/knowledge/kb_types.py",
+    "deeptutor/deskmate"
   ],
   "capabilities": {
     "chat": {
@@ -179,6 +180,10 @@
     "propose_creation": {
       "class_path": "deeptutor.capabilities.creator.tools:ProposeCreationTool",
       "order": 102
+    },
+    "screen_context": {
+      "class_path": "deeptutor.deskmate.tool:ScreenContextTool",
+      "order": 900
     }
   },
   "routes": [],

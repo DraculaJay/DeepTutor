@@ -97,6 +97,7 @@ export class SourceRuntime extends EventEmitter {
         PYTHONUTF8: '1',
         PYTHONIOENCODING: 'utf-8',
         DEEPTUTOR_HOME: config.runtimeHome,
+        DESKMATE_NATIVE_WORKER: process.env.DESKMATE_NATIVE_WORKER || path.join(config.sourcePath, 'native/deskmate/build/deskmate-native-worker'),
         BACKEND_PORT: String(backendPort), FRONTEND_PORT: String(frontendPort),
       };
       // A source adapter never hands environment mutation to the core's updater.

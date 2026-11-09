@@ -3,6 +3,7 @@ import { Geist, Lora } from "next/font/google";
 import "./globals.css";
 import "@/features/ui-layout/classic/classic.css";
 import "@/features/ui-layout/modern/modern.css";
+import DeskmatePanel from "@/components/deskmate/DeskmatePanel";
 import ThemeScript from "@/components/ThemeScript";
 import ToastViewport from "@/components/common/ToastViewport";
 import MotionProvider from "@/components/common/MotionProvider";
@@ -65,6 +66,7 @@ export default function RootLayout({
             <I18nClientBridge>{children}</I18nClientBridge>
           </MotionProvider>
           <ToastViewport />
+          <DeskmatePanel />
         </AppShellProvider>
       </body>
     </html>

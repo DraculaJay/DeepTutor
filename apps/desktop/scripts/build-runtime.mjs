@@ -65,6 +65,12 @@ for (const name of ['deeptutor', 'deeptutor_cli', 'assets', 'scripts', 'requirem
     recursive: true, filter: file => !file.split(path.sep).includes('__pycache__'),
   });
 }
+if (target.platform === 'darwin' && target.arch === 'arm64') {
+  const nativeRoot = path.join(runtime, 'core/native/deskmate/build');
+  await mkdir(nativeRoot, { recursive: true });
+  await cp(process.env.DESKMATE_NATIVE_WORKER || path.join(source, 'native/deskmate/build/deskmate-native-worker'),
+    path.join(nativeRoot, 'deskmate-native-worker'));
+}
 await cp(pythonDirectory, path.join(runtime, 'python'), { recursive: true, verbatimSymlinks: true });
 // Wheel-generated console scripts otherwise retain the builder's absolute path.
 // Windows launchers are .exe files; the runtime only ever calls python -m.

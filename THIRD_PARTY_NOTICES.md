@@ -111,3 +111,12 @@ LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
 OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
 ```
+
+
+## AI Jarvis desktop perception integration
+
+- Source: https://github.com/DraculaJay/pub-local-jarvis at `dd8fbf97a3e0f96239a0a465398654be68e88e15`.
+- Reused Python control plane and native Worker/Scheduler; MIT License, copyright 2026 AI Jarvis contributors.
+- License: `deeptutor/deskmate/vendor/LICENSE`. Integration changes are described in `docs/DESKMATE_INTEGRATION.md`.
+- Optional llama.cpp-omni is pinned to `b9d15b83ee353b2eaeee4d9318c98a35a1347486`, with Jarvis's existing text-prefill patch. Its MIT license, authors and component licenses are preserved in `deeptutor/deskmate/vendor/llama.cpp-omni/`.
+- The integration never downloads or bundles model weights. Upstream Jarvis's original notice about automatic model downloads describes the standalone upstream app, not DeepTutor's integration.

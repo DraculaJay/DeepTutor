@@ -19,6 +19,9 @@ export async function packageMac(target) {
     extraResource: [target.seed],
     appCategoryType: 'public.app-category.education',
     extendInfo: {
+      NSAudioCaptureUsageDescription: 'DeepTutor records course system audio only when you start desktop perception.',
+      NSScreenCaptureUsageDescription: 'DeepTutor captures your screen for the learning session when you start perception.',
+
       NSMicrophoneUsageDescription: 'Open DeepTutor uses the microphone when you speak to your tutor.',
       NSCameraUsageDescription: 'Open DeepTutor uses the camera when you capture learning material.',
       NSLocalNetworkUsageDescription: 'Open DeepTutor runs its learning services on this Mac.',

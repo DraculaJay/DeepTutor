@@ -298,7 +298,11 @@ async def lifespan(app: FastAPI):
         logger.warning(f"v1 memory migration failed: {e}")
 
     app.state.ready = True
-    yield
+    try:
+        yield
+    finally:
+        from deeptutor.deskmate.service import close_all
+        await close_all()
 
     # Execute on shutdown
     app.state.ready = False

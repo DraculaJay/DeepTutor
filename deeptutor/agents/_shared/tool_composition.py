@@ -234,6 +234,11 @@ def compose_enabled_tools(
     The result is ordered and deduplicated. ``optional_whitelist`` is still
     expected to exclude ``AUTO_MOUNTED_TOOLS`` via :func:`default_optional_tools`.
     """
+    # Desktop evidence is mounted only while this workspace has active capture.
+    from deeptutor.deskmate.service import current_service
+    perception = current_service()
+    if perception and perception.native_connected and builtin_whitelist is None:
+        forced = (*forced, "screen_context")
     if exclusive:
         owned = [str(name) for name in capability_owned if str(name).strip()]
         # The KB built-ins are the ones that coexist with an exclusive knowledge

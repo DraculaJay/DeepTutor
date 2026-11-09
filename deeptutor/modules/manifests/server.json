@@ -339,6 +339,17 @@
       },
       "auth": "public",
       "order": 842
+    },
+    {
+      "reference": "deeptutor.api.routers.deskmate:router",
+      "options": {
+        "prefix": "/api/deskmate",
+        "tags": [
+          "deskmate"
+        ]
+      },
+      "auth": "learning",
+      "order": 900
     }
   ],
   "commands": [],
@@ -352,7 +363,8 @@
     "bcrypt>=4.0.0",
     "python-jose[cryptography]>=3.3.0",
     "pocketbase>=0.12.0",
-    "redis>=5.0.0,<7.0.0"
+    "redis>=5.0.0,<7.0.0",
+    "Pillow>=10.0"
   ],
   "executables": []
 }
