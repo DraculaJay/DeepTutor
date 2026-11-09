@@ -27,7 +27,7 @@ it('keeps the original handle mounted between pointerup and its menu-opening cli
   const { result } = renderHook(() => useNoteBlockDrag(editor))
   const handle = { setPointerCapture: vi.fn(), releasePointerCapture: vi.fn(), hasPointerCapture: () => true }
   const event = { button: 0, isPrimary: true, clientX: 10, clientY: 10, pointerId: 1, currentTarget: handle, preventDefault() {}, stopPropagation() {} } as unknown as React.PointerEvent<HTMLButtonElement>
-  act(() => result.current.start(event))
+  act(() => result.current.start(event, 'block'))
   act(() => result.current.end(event))
   expect(handle.releasePointerCapture).toHaveBeenCalledWith(1)
   expect(menu.freezeMenu).toHaveBeenCalledOnce()
