@@ -384,7 +384,7 @@ def test_cards_drop_stray_text_and_tell_the_model_what_they_hold():
 def test_spatial_and_nested_toggle_state_survive_storage_reopen(store):
     doc = page(store)
     original = [
-        {"id": "layout", "type": "noteColumns", "props": {"mode": "wrap"}, "children": [
+        {"id": "layout", "type": "noteColumns", "props": {"mode": "wrap", "wrapX": 37.5, "wrapY": 80, "wrapHeight": 360, "wrapAnchor": "0.5:0"}, "children": [
             {"id": "left", "type": "noteColumn", "props": {}, "children": [block("image-note", "Original source")]},
             {"id": "right", "type": "noteColumn", "props": {}, "children": [
                 {**block("toggle", "Title"), "type": "toggleHeading", "props": {"collapsed": True, "level": 2}, "children": [

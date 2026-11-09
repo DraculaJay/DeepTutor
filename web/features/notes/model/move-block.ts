@@ -43,9 +43,10 @@ export function moveNoteBlock(blocks: NoteBlock[], sourceId: string, targetId: s
     if (index >= 0) { items.splice(index, 1); return true }
     return items.some(block => remove(block.children || []))
   }
-  const insert = (items: NoteBlock[]): boolean => {
+  const column = (block: NoteBlock): NoteBlock => ({ id: crypto.randomUUID(), type: 'noteColumn', props: {}, children: [block] })
+  const insert = (items: NoteBlock[], parent?: NoteBlock, grandparent?: NoteBlock): boolean => {
     const index = items.findIndex(block => block.id === targetId)
-    if (index < 0) return items.some(block => insert(block.children || []))
+    if (index < 0) return items.some(block => insert(block.children || [], block, parent))
     const target = items[index]
     if (zone === 'inside') {
       target.children = [...(target.children || []), source]
@@ -53,7 +54,13 @@ export function moveNoteBlock(blocks: NoteBlock[], sourceId: string, targetId: s
     } else if (zone === 'before' || zone === 'after') {
       items.splice(index + Number(zone === 'after'), 0, source)
     } else {
-      const column = (block: NoteBlock): NoteBlock => ({ id: crypto.randomUUID(), type: 'noteColumn', props: {}, children: [block] })
+      // Extend an existing row, rather than nesting a 50/50 pair in one cell.
+      // A wrap keeps its distinct floating-content/text pair.
+      if ((zone === 'left' || zone === 'right') && parent?.type === 'noteColumn' && grandparent?.type === 'noteColumns' && grandparent.props.mode !== 'wrap') {
+        const peers = grandparent.children!
+        peers.splice(peers.indexOf(parent) + Number(zone === 'right'), 0, column(source))
+        return true
+      }
       items.splice(index, 1, { id: crypto.randomUUID(), type: 'noteColumns', props: { mode: zone === 'wrap' ? 'wrap' : 'columns' },
         children: (zone === 'right' ? [target, source] : [source, target]).map(column) })
     }
@@ -62,4 +69,12 @@ export function moveNoteBlock(blocks: NoteBlock[], sourceId: string, targetId: s
   remove(result)
   insert(result)
   return normalizeLayouts(result)
+}
+
+/** Legacy rows nested a pair in a single cell. Weight that cell by its leaf
+ * tracks, so existing content becomes equal-width without rewriting its JSON. */
+export function noteColumnTracks(column: Pick<NoteBlock, 'children'>): number {
+  const children = column.children || []
+  return children.length === 1 && children[0].type === 'noteColumns' && children[0].props.mode !== 'wrap'
+    ? (children[0].children || []).reduce((sum, child) => sum + noteColumnTracks(child), 0) : 1
 }

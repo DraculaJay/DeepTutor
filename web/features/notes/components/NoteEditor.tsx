@@ -92,6 +92,7 @@ import { closeHistory } from '@tiptap/pm/history'
 import NoteMath from './NoteMath'
 import NoteInlineReviews from './NoteInlineReviews'
 import useNoteBlockDrag from './useNoteBlockDrag'
+import { noteWrapFlow } from '../model/wrap-flow'
 import { noteFile } from './NoteFile'
 import { noteUpload, activeNoteUploads } from './NoteUpload'
 import { noteMediaAccept, noteMediaType } from '../model/media'
@@ -791,7 +792,7 @@ export default function NoteEditor({
     {
       schema,
       tables: { headers: true },
-      extensions: [noteInputRules],
+      extensions: [noteInputRules, noteWrapFlow],
       dictionary: (() => {
         const base = i18n.language.startsWith('zh') ? zh : en
         return {

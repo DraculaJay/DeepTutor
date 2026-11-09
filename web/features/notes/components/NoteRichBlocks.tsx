@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useState } from 'react'
+import { useEffect, useState, type CSSProperties } from 'react'
 import { createBlockSpec, createToggleFrame, defaultBlockSpecs, defaultToggledState, type BlockImplementation } from '@blocknote/core'
 import { createReactBlockSpec, createReactInlineContentSpec } from '@blocknote/react'
 import { useTranslation } from 'react-i18next'
@@ -18,6 +18,8 @@ import {
 import dynamic from 'next/dynamic'
 import type { NoteBlock } from '@/lib/notes-api'
 import { safeNoteUrl } from '../model/urls'
+import NoteColumnsFrame from './NoteColumnsFrame'
+import { noteColumnTracks } from '../model/move-block'
 
 const TaskView = dynamic(() => import('./NoteTaskView'), { ssr: false })
 
@@ -123,17 +125,17 @@ export const toggleHeading = createReactBlockSpec(
 )
 export const noteColumn = createReactBlockSpec(
   { type: 'noteColumn', content: 'none', propSchema: {}, layoutOnly: true, placeable: 'namedOnly' },
-  { renderFrame: ({ slotRef }) => <div className="dt-note-column" ref={slotRef} /> }
+  { renderFrame: ({ block, slotRef }) => <div className="dt-note-column" style={{ gridColumn: `span ${noteColumnTracks(block)}` } as CSSProperties} ref={slotRef} /> }
 )
 export const noteColumns = createReactBlockSpec(
   {
     type: 'noteColumns',
     content: 'none',
-    propSchema: { mode: { default: 'columns', values: ['columns', 'wrap'] as const } },
+    propSchema: { mode: { default: 'columns', values: ['columns', 'wrap'] as const }, wrapX: { default: 0 }, wrapY: { default: 0 }, wrapHeight: { default: 0 }, wrapAnchor: { default: '' } },
     layoutOnly: true,
     children: { allow: ['noteColumn'], min: 2, dissolve: true },
   },
-  { renderFrame: ({ block, slotRef }) => <div className="dt-note-columns" data-layout={block.props.mode} ref={slotRef} /> }
+  { renderFrame: NoteColumnsFrame }
 )
 export const tableOfContents = createReactBlockSpec(
   { type: 'tableOfContents', content: 'none', propSchema: {} },

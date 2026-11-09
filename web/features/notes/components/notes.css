@@ -1962,18 +1962,26 @@
 .dt-note-drop-preview{position:fixed;z-index:1050;pointer-events:none;border-radius:3px;background:#70b99a;transition:width 70ms,height 70ms;box-shadow:0 0 0 2px #70b99a18}
 .dt-note-drop-preview.is-wrap,.dt-note-drop-preview.is-inside{background:#70b99a0b;outline:2px solid #70b99a88;box-shadow:0 3px 12px #356e5316;border-radius:7px}
 .dt-note-drop-preview>span{position:absolute;left:0;bottom:calc(100% + 5px);padding:2px 7px;border-radius:4px;white-space:nowrap;background:#e6f3ec;color:#326d55;font-size:11px;box-shadow:0 1px 5px #356e5312}
-/* A wrap is the same saved pair of columns, rendered with a floated leading block. */
-.dt-note-columns[data-layout='wrap']{display:flow-root}
-.dt-note-columns[data-layout='wrap']>[data-node-view-content-react]{display:contents}
-.dt-note-columns[data-layout='wrap']>[data-node-view-content-react]>.node-noteColumn{display:contents}
-.dt-note-columns[data-layout='wrap']>[data-node-view-content-react]>.node-noteColumn:first-child{display:block;float:left;width:40%;margin:0 24px 12px 0}
-.dt-note-columns[data-layout='wrap']>[data-node-view-content-react]>.node-noteColumn:last-child .dt-note-column,
-.dt-note-columns[data-layout='wrap']>[data-node-view-content-react]>.node-noteColumn:last-child .dt-note-column>[data-node-view-content-react],
-.dt-note-columns[data-layout='wrap']>[data-node-view-content-react]>.node-noteColumn:last-child .dt-note-column>[data-node-view-content-react]>.bn-block-group,
-.dt-note-columns[data-layout='wrap']>[data-node-view-content-react]>.node-noteColumn:last-child .dt-note-column>[data-node-view-content-react]>.bn-block-group>.bn-block-outer,
-.dt-note-columns[data-layout='wrap']>[data-node-view-content-react]>.node-noteColumn:last-child .dt-note-column>[data-node-view-content-react]>.bn-block-group>.bn-block-outer>.bn-block{display:contents}
-.dt-note-columns[data-layout='wrap']>[data-node-view-content-react]>.node-noteColumn:last-child .dt-note-column>[data-node-view-content-react]>.bn-block-group>.bn-block-outer>.bn-block>.bn-block-content{display:block}
-@media(max-width:700px){.dt-note-columns[data-layout='wrap']>[data-node-view-content-react]>.node-noteColumn:first-child{float:none;width:100%;margin:0 0 12px}}
-@media(prefers-reduced-motion:reduce){.dt-note-drop-preview,.dt-note-insert-between button{transition:none}}
-
-.dt-note-toggle{position:relative}.dt-note-toggle>.dt-note-toggle-add{position:absolute;left:29px;bottom:0;margin:0;padding:3px 8px;font:inherit;font-size:12px;color:var(--muted-foreground)}.dt-note-toggle:has(>.dt-note-toggle-add){padding-bottom:26px}
+/* A row has one grid track per saved column, including after adding a third/fourth block. */
+.dt-note-columns[data-layout='columns'] { display:block }
+.dt-note-columns[data-layout='columns'] > [data-node-view-content-react] {
+  display:grid!important; grid-template-columns:repeat(var(--note-column-count),minmax(0,1fr)); gap:28px; width:100%;
+}
+.dt-note-columns[data-layout='columns'] > [data-node-view-content-react] > .node-noteColumn { display:contents!important }
+.dt-note-columns[data-layout='columns'] .dt-note-column { width:auto; min-width:0 }
+.dt-note-columns[data-layout='columns'] .dt-note-columns[data-layout='columns'] { margin:0 }
+/* The object floats freely over the original editable text. Per-line view
+   decorations reserve only its rectangle, allowing prose on both sides. */
+.dt-note-columns[data-layout='wrap'] { display:block; position:relative; min-height:var(--wrap-min-height,0px) }
+.dt-note-columns[data-layout='wrap'] > [data-node-view-content-react] { display:block }
+.dt-note-columns[data-layout='wrap'] > [data-node-view-content-react] > .node-noteColumn:first-child {
+  display:block!important; position:absolute; z-index:2; left:var(--wrap-left,0px); top:var(--wrap-top,0px); width:40%;
+}
+.dt-note-columns[data-layout='wrap'] > [data-node-view-content-react] > .node-noteColumn:nth-child(2) { display:block!important; width:100%; min-width:0 }
+.dt-note-columns[data-layout='wrap'] > [data-node-view-content-react] > .node-noteColumn:nth-child(2) > [data-node-view-wrapper] { display:contents }
+.dt-note-wrap-gap { display:inline-block!important; height:0; line-height:0; vertical-align:baseline; pointer-events:none; user-select:none }
+.dt-note-wrap-anchors { position:absolute; inset:0; z-index:5; pointer-events:none; outline:1px dashed #70b99a66; border-radius:4px }
+.dt-note-wrap-anchors i { position:absolute; width:7px; height:7px; margin:-3.5px; background:var(--background); border:1px solid #70b99a; border-radius:50% }
+.dt-note-wrap-anchors i[data-active='true'] { background:#70b99a; box-shadow:0 0 0 4px #70b99a22; animation:dt-wrap-dwell 3s linear }
+.dt-note-wrap-anchors i[data-snapped='true'] { background:#478365; box-shadow:0 0 0 5px #70b99a33; animation:none }
+@keyframes dt-wrap-dwell { from { box-shadow:0 0 0 1px #70b99a22 } to { box-shadow:0 0 0 6px #70b99a44 } }

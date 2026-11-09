@@ -8,9 +8,11 @@ import type { BlockNoteEditor, BlockSchema, InlineContentSchema, StyleSchema } f
 import type { NoteBlock } from '@/lib/notes-api'
 import { canMoveNoteBlock, findNoteBlock, isNoteToggle, moveNoteBlock, noteDropZone, type NoteDropZone } from '../model/move-block'
 
+import { sendWrapDrag } from './NoteColumnsFrame'
+
 type Drop = { id: string; zone: NoteDropZone; x: number; y: number; width: number; height: number }
 export default function useNoteBlockDrag<B extends BlockSchema, I extends InlineContentSchema, S extends StyleSchema>(editor: BlockNoteEditor<B, I, S>) {
-  const gesture = useRef<{ id: string; x: number; y: number; moved: boolean; pointer: number; handle: HTMLButtonElement } | null>(null)
+  const gesture = useRef<{ id: string; x: number; y: number; moved: boolean; pointer: number; handle: HTMLButtonElement; wrap: HTMLElement | null } | null>(null)
   const suppressClick = useRef(false)
   const pointer = useRef({ x: 0, y: 0 })
   const animation = useRef<number | null>(null)
@@ -22,6 +24,7 @@ export default function useNoteBlockDrag<B extends BlockSchema, I extends Inline
     // unfreezing would hide the menu that has just mounted.
     if (!current) return
     gesture.current = null
+    if (current.wrap) sendWrapDrag(current.wrap, { phase: 'cancel', ...pointer.current })
     if (animation.current !== null) cancelAnimationFrame(animation.current)
     animation.current = null
     if (current?.handle.hasPointerCapture(current.pointer)) current.handle.releasePointerCapture(current.pointer)
@@ -38,7 +41,14 @@ export default function useNoteBlockDrag<B extends BlockSchema, I extends Inline
       cancel()
     }
   }, [cancel])
+  const inWrap = (x: number, y: number) => {
+    const wrap = gesture.current?.wrap
+    if (!wrap) return false
+    const rect = wrap.getBoundingClientRect()
+    return x >= rect.left && x <= rect.right && y >= rect.top && y <= rect.bottom
+  }
   const destination = (x: number, y: number): Drop | null => {
+    if (inWrap(x, y)) return null
     const element = document.elementFromPoint(x, y)?.closest<HTMLElement>('.bn-block-outer[data-id]')
     if (!element || !editor.domElement?.contains(element) || !gesture.current) return null
     const id = element.dataset.id!
@@ -73,7 +83,12 @@ export default function useNoteBlockDrag<B extends BlockSchema, I extends Inline
       if (event.button !== 0 || !event.isPrimary || !editor.isEditable) return
       cancel()
       suppressClick.current = false
-      gesture.current = { id, x: event.clientX, y: event.clientY, moved: false, pointer: event.pointerId, handle: event.currentTarget }
+      const source = editor.domElement?.querySelector<HTMLElement>(`.bn-block-outer[data-id="${CSS.escape(id)}"]`)
+      const column = source?.closest<HTMLElement>('.node-noteColumn')
+      const layout = column?.parentElement?.closest<HTMLElement>('.dt-note-columns[data-layout="wrap"]')
+      const wrap = layout?.querySelector(':scope > [data-node-view-content-react] > .node-noteColumn:first-child') === column ? layout || null : null
+      gesture.current = { id, x: event.clientX, y: event.clientY, moved: false, pointer: event.pointerId, handle: event.currentTarget, wrap }
+      if (wrap) sendWrapDrag(wrap, { phase: 'start', x: event.clientX, y: event.clientY })
       pointer.current = { x: event.clientX, y: event.clientY }
       menu?.freezeMenu()
       event.currentTarget.setPointerCapture(event.pointerId)
@@ -88,6 +103,7 @@ export default function useNoteBlockDrag<B extends BlockSchema, I extends Inline
       if (!current.moved) { current.moved = true; animation.current = requestAnimationFrame(scroll) }
       suppressClick.current = true
       event.preventDefault()
+      if (current.wrap) sendWrapDrag(current.wrap, { phase: inWrap(event.clientX, event.clientY) ? 'move' : 'leave', x: event.clientX, y: event.clientY })
       setDrop(destination(event.clientX, event.clientY))
     },
     end: (event: PointerEvent<HTMLButtonElement>) => {
@@ -95,10 +111,18 @@ export default function useNoteBlockDrag<B extends BlockSchema, I extends Inline
       if (!current || current.pointer !== event.pointerId) return
       if (!current.moved) {
         // Keep the handle mounted until its following click opens the original menu.
+        if (current.wrap) sendWrapDrag(current.wrap, { phase: 'cancel', ...pointer.current })
         gesture.current = null
         if (current.handle.hasPointerCapture(current.pointer)) current.handle.releasePointerCapture(current.pointer)
         return
       }
+      if (current.wrap && inWrap(event.clientX, event.clientY)) {
+        sendWrapDrag(current.wrap, { phase: 'commit', x: event.clientX, y: event.clientY })
+        current.wrap = null
+        cancel()
+        return
+      }
+      if (current.wrap) { sendWrapDrag(current.wrap, { phase: 'cancel', ...pointer.current }); current.wrap = null }
       const target = destination(event.clientX, event.clientY)
       if (target) {
         const blocks = moveNoteBlock(editor.document as NoteBlock[], current.id, target.id, target.zone)

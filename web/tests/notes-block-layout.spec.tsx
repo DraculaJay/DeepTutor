@@ -4,7 +4,7 @@ import { BlockNoteEditor, BlockNoteSchema, defaultBlockSpecs } from '@blocknote/
 import { BlockNoteViewRaw } from '@blocknote/react'
 import { closeHistory } from '@tiptap/pm/history'
 import { toggleListItem, toggleHeading, noteColumn, noteColumns } from '@/features/notes/components/NoteRichBlocks'
-import { canMoveNoteBlock, findNoteBlock, moveNoteBlock, noteDropZone } from '@/features/notes/model/move-block'
+import { canMoveNoteBlock, findNoteBlock, moveNoteBlock, noteDropZone, noteColumnTracks } from '@/features/notes/model/move-block'
 import type { NoteBlock } from '@/lib/notes-api'
 
 vi.mock('react-i18next', () => ({ useTranslation: () => ({ t: (key: string) => key }) }))
@@ -93,4 +93,27 @@ it('saves Toggle List clicks in block props and restores them without browser vi
   expect(reopened.getBlock('list')!.props).toMatchObject({ collapsed: true })
   expect(reopened.getBlock('child')!.id).toBe('child')
   element.remove()
+})
+
+it('extends a row to three/four equal tracks without nesting pairs and preserves the row ID', () => {
+  const original = [block('a'), block('b'), block('c'), block('d')]
+  const pair = moveNoteBlock(original, 'a', 'b', 'left')!
+  const triple = moveNoteBlock(pair, 'c', 'b', 'right')!
+  const four = moveNoteBlock(triple, 'd', 'a', 'left')!
+  expect(four).toHaveLength(1)
+  expect(four[0].id).toBe(pair[0].id)
+  expect(four[0].children!.map(col => col.children![0].id)).toEqual(['d', 'a', 'b', 'c'])
+  expect(four[0].children!.every(col => col.children!.every(child => child.type !== 'noteColumns'))).toBe(true)
+  const reordered = moveNoteBlock(four, 'b', 'd', 'left')!
+  expect(reordered[0].children!.map(col => col.children![0].id)).toEqual(['b', 'd', 'a', 'c'])
+  expect(original.map(item => item.id)).toEqual(['a', 'b', 'c', 'd'])
+})
+
+it('weights legacy nested pairs by their leaf tracks without changing existing data', () => {
+  const pair = moveNoteBlock([block('a'), block('b')], 'a', 'b', 'left')![0]
+  const legacyColumn: NoteBlock = { id: 'old-column', type: 'noteColumn', props: {}, children: [pair] }
+  const before = structuredClone(legacyColumn)
+  expect(noteColumnTracks(legacyColumn)).toBe(2)
+  expect(noteColumnTracks({ children: [block('c')] })).toBe(1)
+  expect(legacyColumn).toEqual(before)
 })
