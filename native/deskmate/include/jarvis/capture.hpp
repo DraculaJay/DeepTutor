@@ -14,11 +14,13 @@ struct VideoFrame {
   std::uint32_t row_pitch{};
   std::uint64_t timestamp_100ns{};
   std::vector<std::byte> bgra{};
+  std::uint32_t source_id{};
 };
 
 class IDesktopCapture {
  public:
   virtual ~IDesktopCapture() = default;
+  virtual void select_window(std::uint32_t window_id) = 0;
   virtual void start() = 0;
   virtual void stop() noexcept = 0;
   [[nodiscard]] virtual std::optional<VideoFrame> next_frame(std::uint32_t timeout_ms) = 0;

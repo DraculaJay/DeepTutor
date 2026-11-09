@@ -5,6 +5,8 @@
 namespace jarvis::mac {
 std::unique_ptr<IDesktopCapture> make_screen_capture();
 std::unique_ptr<IAudioCapture> make_audio_tap();
+void initialize_foreground_tracking();
+nlohmann::json capture_sources();
 std::uintptr_t foreground_id() noexcept;
 bool is_game_launcher(std::uintptr_t pid) noexcept;
 nlohmann::json foreground();

@@ -504,8 +504,9 @@ bool Worker::start(const std::string& model_path) {
 #if defined(_WIN32) || defined(__APPLE__)
         if (r.id == active_perception_id_) {
           const auto perception_window = active_perception_window_;
+          const auto selected_window = capture_window_.load();
           const auto foreground_window =
-              mac::foreground_id();
+              selected_window ? (std::uintptr_t{1}<<32U)|selected_window : mac::foreground_id();
           const bool foreground_changed =
               active_perception_window_ != 0 && foreground_window != 0 &&
               active_perception_window_ != foreground_window;
@@ -983,6 +984,7 @@ bool Worker::start_monitoring(std::unique_ptr<IDesktopCapture> desktop,
             frame = std::make_shared<VideoFrame>(std::move(*captured));
           }
         }
+        if (frame && frame->source_id != capture_window_.load()) frame.reset();
         if (!capture_ready && frame) {
           capture_ready = true;
           emit_monitoring_event(nlohmann::json{{"native_event", "capture.ready"}, {"screen_frames", true}, {"system_audio_blocks", audio_received}}.dump());
@@ -995,8 +997,9 @@ bool Worker::start_monitoring(std::unique_ptr<IDesktopCapture> desktop,
           emit_monitoring_event(R"({"native_event":"capture.failed","error":"No screen frames arrived within 15 seconds. Check Screen Recording permission."})");
           break;
         }
+        const auto selected_window = capture_window_.load();
         const auto foreground_window =
-            mac::foreground_id();
+            selected_window ? (std::uintptr_t{1}<<32U)|selected_window : mac::foreground_id();
         bool foreground_changed = false;
         {
           std::lock_guard lock(mutex_);
@@ -1046,6 +1049,7 @@ bool Worker::start_monitoring(std::unique_ptr<IDesktopCapture> desktop,
           }
           {
             std::lock_guard lock(mutex_);
+            if(frame->source_id != capture_window_.load()) continue;
             latest_frame_ = frame;
             latest_audio_ = latest_audio_window;
             latest_foreground_window_ = foreground_window;
@@ -1194,8 +1198,9 @@ bool Worker::start_monitoring(std::unique_ptr<IDesktopCapture> desktop,
             const auto perception_id = observation_id_.fetch_add(1);
             {
               std::lock_guard lock(mutex_);
+              if(frame->source_id != capture_window_.load()) continue;
               active_perception_id_ = perception_id;
-              active_perception_window_ = latest_foreground_window_;
+              active_perception_window_ = frame->source_id ? (std::uintptr_t{1}<<32U)|frame->source_id : foreground_window;
             }
             submit({InferenceRequest{.id=perception_id,
                                      .prompt=std::move(prompt),
@@ -1214,6 +1219,9 @@ bool Worker::start_monitoring(std::unique_ptr<IDesktopCapture> desktop,
           std::cerr << "Jarvis monitoring capture tick failed: " << error.what() << '\n';
           last_capture_error = now;
         }
+        {std::lock_guard lock(mutex_); latest_frame_.reset();}
+        emit_monitoring_event(nlohmann::json{{"native_event","capture.failed"},{"error",error.what()}}.dump());
+        break;
       } catch (...) {
         const auto now = std::chrono::steady_clock::now();
         if (now - last_capture_error >= std::chrono::seconds(5)) {
@@ -1227,12 +1235,22 @@ bool Worker::start_monitoring(std::unique_ptr<IDesktopCapture> desktop,
   });
   return true;
 }
+void Worker::select_capture_window(std::uint32_t window_id) {
+  std::lock_guard lock(mutex_);
+  if(!desktop_) throw std::runtime_error("Screen capture is not running");
+  desktop_->select_window(window_id);
+  capture_window_.store(window_id);
+  latest_frame_.reset(); latest_audio_.reset();
+  recent_perceptions_.clear(); previous_scene_.clear();
+  reset_perception_audio_.store(true);
+}
 void Worker::stop_monitoring() noexcept {
   if (capture_thread_.joinable()) { capture_thread_.request_stop(); capture_thread_.join(); }
   stop_duplex();
   std::unique_ptr<IDesktopCapture> desktop; std::unique_ptr<IAudioCapture> audio_capture;
   {
     std::lock_guard lock(mutex_);
+    capture_window_.store(0);
     desktop = std::move(desktop_); audio_capture = std::move(audio_);
     latest_frame_.reset(); latest_audio_.reset();
     active_perception_id_ = 0;

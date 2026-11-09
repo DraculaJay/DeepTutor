@@ -10,7 +10,22 @@
 #include <cstring>
 
 namespace {
-struct VideoQueue {std::mutex mutex; std::condition_variable cv; std::optional<jarvis::VideoFrame> latest; std::string error;};
+std::mutex foreground_mutex;
+NSRunningApplication* foreground_app;
+id foreground_observer;
+NSRunningApplication* current_foreground() {
+  std::lock_guard lock(foreground_mutex);
+  return foreground_observer ? foreground_app : NSWorkspace.sharedWorkspace.frontmostApplication;
+}
+SCShareableContent* shareable_content() {
+  auto done=dispatch_semaphore_create(0);
+  __block SCShareableContent* content=nil; __block NSError* failure=nil;
+  [SCShareableContent getShareableContentExcludingDesktopWindows:YES onScreenWindowsOnly:NO completionHandler:^(SCShareableContent* value,NSError* error){content=value;failure=error;dispatch_semaphore_signal(done);}];
+  dispatch_semaphore_wait(done,DISPATCH_TIME_FOREVER);
+  if(failure) throw std::runtime_error(failure.localizedDescription.UTF8String);
+  return content;
+}
+struct VideoQueue {std::mutex mutex; std::condition_variable cv; std::optional<jarvis::VideoFrame> latest; std::string error; std::uint32_t source_id{};};
 std::uint64_t now100ns() { return std::chrono::duration_cast<std::chrono::nanoseconds>(std::chrono::system_clock::now().time_since_epoch()).count()/100; }
 void checked(OSStatus code,const char* action) { if(code!=noErr) throw std::runtime_error(std::string(action)+": OSStatus "+std::to_string(code)); }
 }
@@ -19,10 +34,14 @@ void checked(OSStatus code,const char* action) { if(code!=noErr) throw std::runt
 @end
 @implementation DeskmateScreenOutput
 - (void)stream:(SCStream*)stream didStopWithError:(NSError*)error {
-  std::lock_guard lock(self.frames->mutex); self.frames->error=error.localizedDescription.UTF8String; self.frames->cv.notify_all();
+  std::lock_guard lock(self.frames->mutex); self.frames->error=std::string(error.localizedDescription.UTF8String)+" ("+error.domain.UTF8String+":"+std::to_string(error.code)+")"; self.frames->cv.notify_all();
 }
 - (void)stream:(SCStream*)stream didOutputSampleBuffer:(CMSampleBufferRef)sample ofType:(SCStreamOutputType)type {
   if(type!=SCStreamOutputTypeScreen || !CMSampleBufferIsValid(sample)) return;
+  auto attachments=CMSampleBufferGetSampleAttachmentsArray(sample, false);
+  if(!attachments || CFArrayGetCount(attachments)==0) return;
+  auto info=(__bridge NSDictionary*)CFArrayGetValueAtIndex(attachments,0);
+  if([info[SCStreamFrameInfoStatus] integerValue]!=SCFrameStatusComplete) return;
   auto pixel=CMSampleBufferGetImageBuffer(sample); if(!pixel) return;
   CVPixelBufferLockBaseAddress(pixel,kCVPixelBufferLock_ReadOnly);
   jarvis::VideoFrame f;
@@ -31,7 +50,7 @@ void checked(OSStatus code,const char* action) { if(code!=noErr) throw std::runt
   auto count=std::size_t(f.row_pitch)*f.height; f.bgra.resize(count);
   std::memcpy(f.bgra.data(),CVPixelBufferGetBaseAddress(pixel),count);
   CVPixelBufferUnlockBaseAddress(pixel,kCVPixelBufferLock_ReadOnly);
-  { std::lock_guard lock(self.frames->mutex); self.frames->latest=std::move(f); }
+  { std::lock_guard lock(self.frames->mutex); f.source_id=self.frames->source_id; self.frames->latest=std::move(f); }
   self.frames->cv.notify_one();
 }
 @end
@@ -41,9 +60,12 @@ class ScreenCapture final : public IDesktopCapture {
   SCStream* stream_;
   DeskmateScreenOutput* output_;
   dispatch_queue_t queue_;
+  std::mutex source_mutex_;
+  SCDisplay* display_;
  public:
   ~ScreenCapture() override {stop();}
   void start() override {
+    std::lock_guard source_lock(source_mutex_);
     @autoreleasepool {
       if(!CGPreflightScreenCaptureAccess() && !CGRequestScreenCaptureAccess())
         throw std::runtime_error("Screen Recording permission denied. Enable the launching app in System Settings > Privacy & Security > Screen & System Audio Recording, then restart it.");
@@ -53,6 +75,7 @@ class ScreenCapture final : public IDesktopCapture {
       dispatch_semaphore_wait(done,DISPATCH_TIME_FOREVER);
       if(failure || content.displays.count==0) throw std::runtime_error(failure?failure.localizedDescription.UTF8String:"No shareable display");
       SCDisplay* display=content.displays.firstObject;
+      display_=display;
       auto filter=[[SCContentFilter alloc] initWithDisplay:display excludingWindows:@[]];
       auto config=[SCStreamConfiguration new];
       config.width=1280; config.height=std::max(1, int(1280.0*display.height/display.width));
@@ -69,6 +92,27 @@ class ScreenCapture final : public IDesktopCapture {
       if(failure) throw std::runtime_error(failure.localizedDescription.UTF8String);
     }
   }
+  void select_window(std::uint32_t window_id) override {
+    std::lock_guard source_lock(source_mutex_);
+    if(!stream_) throw std::runtime_error("Screen capture is still starting. Wait for the first frame.");
+    @autoreleasepool {
+      SCContentFilter* filter=nil;
+      if(window_id) {
+        auto content=shareable_content();
+        SCWindow* selected=nil;
+        for(SCWindow* window in content.windows) if(window.windowID==window_id) {selected=window;break;}
+        if(!selected) throw std::runtime_error("The selected window is no longer available. Refresh the window list.");
+        filter=[[SCContentFilter alloc] initWithDesktopIndependentWindow:selected];
+      } else filter=[[SCContentFilter alloc] initWithDisplay:display_ excludingWindows:@[]];
+      auto done=dispatch_semaphore_create(0); __block NSError* failure=nil;
+      [stream_ updateContentFilter:filter completionHandler:^(NSError* error){failure=error;dispatch_semaphore_signal(done);}];
+      dispatch_semaphore_wait(done,DISPATCH_TIME_FOREVER);
+      if(failure) throw std::runtime_error(failure.localizedDescription.UTF8String);
+      dispatch_sync(queue_, ^{});
+      std::lock_guard lock(frames_.mutex);
+      frames_.source_id=window_id; frames_.latest.reset();
+    }
+  }
   void stop() noexcept override {
     if(!stream_) return;
     auto done=dispatch_semaphore_create(0);
@@ -79,6 +123,7 @@ class ScreenCapture final : public IDesktopCapture {
     std::lock_guard lock(frames_.mutex); frames_.latest.reset(); frames_.error.clear();
   }
   std::optional<VideoFrame> next_frame(std::uint32_t timeout) override {
+    std::lock_guard source_lock(source_mutex_);
     std::unique_lock lock(frames_.mutex);
     frames_.cv.wait_for(lock,std::chrono::milliseconds(timeout),[&]{return frames_.latest.has_value() || !frames_.error.empty();});
     if(!frames_.error.empty()) throw std::runtime_error(frames_.error);
@@ -133,12 +178,37 @@ class AudioTap final : public IAudioCapture {
     if(blocks_.empty()) return {}; auto b=std::move(blocks_.front());blocks_.pop_front();return b;
   }
 };
+nlohmann::json capture_sources() {
+  @autoreleasepool {
+    auto sources=nlohmann::json::array({{{"id",0},{"label","整个屏幕"}}});
+    for(SCWindow* window in shareable_content().windows) {
+      if(window.windowLayer!=0 || window.frame.size.width<200 || window.frame.size.height<150) continue;
+      auto application=[NSRunningApplication runningApplicationWithProcessIdentifier:window.owningApplication.processID];
+      if(application.activationPolicy!=NSApplicationActivationPolicyRegular) continue;
+      std::string app=window.owningApplication.applicationName.UTF8String ?: "";
+      std::string title=window.title.UTF8String ?: "";
+      sources.push_back({{"id",window.windowID},{"label",app+(title.empty()?"":" — "+title)}});
+    }
+    return {{"sources",sources}};
+  }
+}
 std::unique_ptr<IDesktopCapture> make_screen_capture(){return std::make_unique<ScreenCapture>();}
 std::unique_ptr<IAudioCapture> make_audio_tap(){return std::make_unique<AudioTap>();}
-std::uintptr_t foreground_id() noexcept {@autoreleasepool {return NSWorkspace.sharedWorkspace.frontmostApplication.processIdentifier;}}
+void initialize_foreground_tracking() {
+  // NSWorkspace must be observed on the main run loop, not first instantiated
+  // on the capture thread, where its frontmostApplication cache stays stale.
+  (void)CGMainDisplayID();
+  auto workspace=NSWorkspace.sharedWorkspace;
+  foreground_app=workspace.frontmostApplication;
+  foreground_observer=[workspace.notificationCenter addObserverForName:NSWorkspaceDidActivateApplicationNotification object:nil queue:NSOperationQueue.mainQueue usingBlock:^(NSNotification* notification){
+    std::lock_guard lock(foreground_mutex);
+    foreground_app=notification.userInfo[NSWorkspaceApplicationKey];
+  }];
+}
+std::uintptr_t foreground_id() noexcept {@autoreleasepool {return current_foreground().processIdentifier;}}
 bool is_game_launcher(std::uintptr_t pid) noexcept {@autoreleasepool {auto app=[NSRunningApplication runningApplicationWithProcessIdentifier:pid];return [app.bundleIdentifier isEqualToString:@"com.valvesoftware.steam"];}}
 nlohmann::json foreground() {@autoreleasepool {
-  auto app=NSWorkspace.sharedWorkspace.frontmostApplication;
+  auto app=current_foreground();
   return {{"pid",app.processIdentifier},{"name",app.localizedName.UTF8String ?: ""},{"bundle_id",app.bundleIdentifier.UTF8String ?: ""}};
 }}
 }

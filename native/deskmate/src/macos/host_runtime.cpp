@@ -16,7 +16,7 @@ std::string base64(const unsigned char* bytes, std::size_t size) {
 }
 nlohmann::json encode_media(const VideoFrame& f) {
   return {{"width",f.width},{"height",f.height},{"row_pitch",f.row_pitch},
-    {"timestamp_100ns",std::to_string(f.timestamp_100ns)},
+    {"timestamp_100ns",std::to_string(f.timestamp_100ns)},{"source_id",f.source_id},
     {"bgra",base64(reinterpret_cast<const unsigned char*>(f.bgra.data()),f.bgra.size())}};
 }
 void HostRuntime::load(std::string) { loaded_=true; }

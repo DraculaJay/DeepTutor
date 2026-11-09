@@ -81,3 +81,31 @@ async def sync_context(body: StartRequest):
         return await status()
     except (RuntimeError, ValueError, OSError, TimeoutError) as exc:
         raise HTTPException(409, str(exc)) from exc
+
+
+class CaptureSourceRequest(BaseModel):
+    note_document_id: str = Field(pattern=r"^[0-9a-f]{8,32}$")
+    window_id: int = Field(ge=0, le=4294967295)
+
+
+@router.get('/capture/sources')
+async def capture_sources():
+    service = current_service()
+    if not service or not service.native_connected:
+        raise HTTPException(409, '请先启动同桌感知，再选择窗口。')
+    try:
+        return await service.native_client.request('capture_sources', {})
+    except (RuntimeError, OSError, TimeoutError) as exc:
+        raise HTTPException(409, str(exc)) from exc
+
+
+@router.post('/capture/source')
+async def select_capture_source(body: CaptureSourceRequest):
+    service = current_service()
+    if not service or not service.native_connected or not service.matches_context(note_document_id=body.note_document_id):
+        raise HTTPException(409, '感知未在当前笔记中启动。')
+    try:
+        await service.select_capture_source(body.window_id)
+        return await status()
+    except (RuntimeError, ValueError, OSError, TimeoutError) as exc:
+        raise HTTPException(409, str(exc)) from exc

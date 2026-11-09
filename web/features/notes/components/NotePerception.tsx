@@ -8,6 +8,7 @@ import "./note-perception.css";
 type PerceptionStatus = {
   connected: boolean; capture_ready: boolean; system_audio_ready?: boolean; error: string;
   context?: {
+    capture_source?: { id: number; label: string };
     session_id: string; note_document_id?: string; note_title?: string;
     timestamp?: string; context_synced_at?: string; native_context_revision?: number;
     latest_observation?: string; recent_transcript?: string;
@@ -21,6 +22,7 @@ export default function NotePerception({ pageId, flush, onAsk, onSuggestions }: 
   onSuggestions: () => void;
 }) {
   const [status, setStatus] = useState<PerceptionStatus | null>(null);
+  const [sources, setSources] = useState<{ id: number; label: string }[]>([]);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
   const refresh = useCallback(async () => {
@@ -39,6 +41,29 @@ export default function NotePerception({ pageId, flush, onAsk, onSuggestions }: 
   const owned = status?.context?.note_document_id === pageId;
   const connected = Boolean(status?.connected && owned);
   const elsewhere = Boolean(status?.connected && !owned);
+  const loadSources = useCallback(async () => {
+    const response = await apiFetch(apiUrl("/api/deskmate/capture/sources"), { cache: "no-store" });
+    const value = await response.json();
+    if (!response.ok) throw new Error(value.detail || "窗口列表读取失败");
+    setSources(value.sources);
+  }, []);
+  useEffect(() => {
+    if (connected) void loadSources().catch(reason => setError(String(reason)));
+    else setSources([]);
+  }, [connected, pageId, loadSources]);
+  const selectSource = async (windowId: number) => {
+    setBusy(true); setError("");
+    try {
+      const response = await apiFetch(apiUrl("/api/deskmate/capture/source"), {
+        method: "POST", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ note_document_id: pageId, window_id: windowId }),
+      });
+      const value = await response.json();
+      if (!response.ok) throw new Error(value.detail || "窗口切换失败");
+      setStatus(value);
+    } catch (reason) { setError(reason instanceof Error ? reason.message : String(reason)); }
+    finally { setBusy(false); }
+  };
   const act = async (action: "start" | "stop" | "context" | "course/finish") => {
     setBusy(true); setError("");
     try {
@@ -61,11 +86,22 @@ export default function NotePerception({ pageId, flush, onAsk, onSuggestions }: 
     } catch (reason) { setError(String(reason)); }
   };
   const context = owned ? status?.context : undefined;
+  const visibleSources = sources.filter(source => source.id === 0 || source.label.includes(" — "));
   return <section className="dt-note-perception" aria-label="同桌感知">
     <div className="dt-note-perception-bar">
       <span className={`dt-note-perception-dot ${connected && status?.capture_ready ? "is-active" : ""}`} />
       <strong>同桌感知</strong>
       <span className="dt-note-perception-state">{busy ? "正在处理…" : connected ? status?.capture_ready ? "感知中 · 当前笔记" : "正在准备采集" : elsewhere ? "正在另一处学习" : "已停止"}</span>
+      <label className="dt-note-perception-source">感知范围
+        <select aria-label="选择感知窗口" disabled={busy || !connected || !status?.capture_ready}
+          value={context?.capture_source?.id ?? 0} onChange={event => void selectSource(Number(event.target.value))}>
+          <option value={0}>{connected ? "整个屏幕" : "启动后选择窗口"}</option>
+          {visibleSources.filter(source => source.id !== 0).map(source => <option key={source.id} value={source.id}>{source.label}</option>)}
+          {context?.capture_source?.id && !visibleSources.some(source => source.id === context.capture_source?.id)
+            ? <option value={context.capture_source.id}>{context.capture_source.label}（请刷新确认窗口）</option> : null}
+        </select>
+        {connected && <button disabled={busy} onClick={() => void loadSources().catch(reason => setError(String(reason)))}>刷新窗口</button>}
+      </label>
       <div className="dt-note-perception-actions">
         {!connected && !elsewhere && <button disabled={busy} onClick={() => void act("start")}>启动感知</button>}
         {connected && <>
@@ -80,6 +116,7 @@ export default function NotePerception({ pageId, flush, onAsk, onSuggestions }: 
     {elsewhere && <p>当前感知不会混入这份笔记。{status?.context?.note_document_id && <Link href={`/co-writer/${status.context.note_document_id}`}>返回正在学习的笔记</Link>}</p>}
     {connected && <details className="dt-note-perception-details">
       <summary>{context?.latest_observation || "正在等待屏幕观察；首次使用请允许屏幕与系统音频录制。"}</summary>
+      <p>感知范围：{context?.capture_source?.label || "整个屏幕"}。选择窗口后，切回笔记也会继续捕捉该窗口；系统音频仍来自电脑输出。</p>
       <p>系统音频：{status?.system_audio_ready ? "已收到音频流" : "等待电脑播放声音"} · 笔记上下文：{context?.context_synced_at ? "已同步" : "待同步"}</p>
       <p>启动和提问时会同步已保存的笔记及当前问答；编辑后也可点击“同步笔记”。感知不会覆盖正文。</p>
       {context?.learning_context?.question && <p>当前关注：{context.learning_context.question}</p>}

@@ -37,6 +37,7 @@ class Worker {
                         std::unique_ptr<IAudioCapture> audio,
                         std::chrono::milliseconds interval = std::chrono::seconds(1));
   void stop_monitoring() noexcept;
+  void select_capture_window(std::uint32_t window_id);
 #endif
   [[nodiscard]] WorkerState state() const noexcept;
   std::shared_ptr<const VideoFrame> snapshot();
@@ -54,6 +55,7 @@ class Worker {
     std::vector<std::string> barrages;
   };
   std::unique_ptr<IDesktopCapture> desktop_{};
+  std::atomic_uint32_t capture_window_{0};
   std::unique_ptr<IAudioCapture> audio_{};
   std::jthread capture_thread_{};
   std::jthread duplex_input_thread_{};

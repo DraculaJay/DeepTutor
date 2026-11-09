@@ -79,6 +79,8 @@ class NamedPipeNativeClient(NativeClient):
 
     _METHODS = {
         "snapshot": MessageType.SNAPSHOT,
+        "capture_sources": MessageType.CAPTURE_SOURCES,
+        "capture_select": MessageType.CAPTURE_SELECT,
         "set_learning_context": MessageType.LEARNING_CONTEXT,
         "start_monitoring": MessageType.START,
         "resume_monitoring": MessageType.START,

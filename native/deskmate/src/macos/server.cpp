@@ -52,6 +52,14 @@ int serve(const std::string& path,Worker& worker,HostRuntime* host) {
         auto frame=worker.snapshot(); if(!frame) throw std::runtime_error("No captured frame yet");
         send(ipc::MessageType::result,id,encode_media(*frame).dump());continue;
       }
+      if(type==ipc::MessageType::capture_sources) {
+        send(ipc::MessageType::status,id,capture_sources().dump());continue;
+      }
+      if(type==ipc::MessageType::capture_select) {
+        auto window_id=nlohmann::json::parse(body).at("window_id").get<std::uint32_t>();
+        worker.select_capture_window(window_id);
+        send(ipc::MessageType::status,id,"{\"ok\":true}");continue;
+      }
       if(type==ipc::MessageType::learning_context) {
         const auto revision=worker.set_learning_context(std::move(body));
         send(ipc::MessageType::status,id,nlohmann::json{{"ok",true},{"context_revision",revision}}.dump());continue;

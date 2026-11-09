@@ -290,14 +290,16 @@ class RecordingRuntime final : public jarvis::IOmniRuntime {
 };
 class TestDesktopCapture final : public jarvis::IDesktopCapture {
  public:
+  void select_window(std::uint32_t id) override {source_id_=id;}
   void start() override {}
   void stop() noexcept override {}
   std::optional<jarvis::VideoFrame> next_frame(std::uint32_t) override {
     std::vector<std::byte> pixels(16, (++sequence_ % 2) ? std::byte{0} : std::byte{255});
-    return jarvis::VideoFrame{2, 2, 8, 0, std::move(pixels)};
+    return jarvis::VideoFrame{2, 2, 8, 0, std::move(pixels),source_id_.load()};
   }
  private:
   std::size_t sequence_{};
+  std::atomic_uint32_t source_id_{};
 };
 class TestAudioCapture final : public jarvis::IAudioCapture {
  public:
@@ -579,6 +581,12 @@ int main() {
   notebook.set_learning_context(R"({"note_title":"context-v2"})");
   for (int i=0; i<500 && !shared->has_shared_context("context-v2",true); ++i) std::this_thread::sleep_for(std::chrono::milliseconds(2));
   require(shared->has_shared_context("context-v2",true), "existing duplex maintenance applies changed note context");
+  notebook.select_capture_window(7391);
+  for(int i=0;i<500 && !notebook.snapshot();++i) std::this_thread::sleep_for(std::chrono::milliseconds(2));
+  require(notebook.snapshot() && notebook.snapshot()->source_id==7391,"switching capture source discards the old screenshot");
+  notebook.select_capture_window(0);
+  for(int i=0;i<500 && !notebook.snapshot();++i) std::this_thread::sleep_for(std::chrono::milliseconds(2));
+  require(notebook.snapshot() && notebook.snapshot()->source_id==0,"whole-screen capture can be restored");
   notebook.stop_monitoring();
   notebook.stop();
 #endif

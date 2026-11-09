@@ -28,6 +28,8 @@ enum class MessageType : std::uint16_t {
   stop_duplex = 12,
   snapshot = 13,
   learning_context = 14,
+  capture_sources = 15,
+  capture_select = 16,
 };
 
 enum class StatusCode : std::uint32_t {

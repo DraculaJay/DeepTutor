@@ -3,3 +3,5 @@
 .dt-note-perception-dot{width:6px;height:6px;border-radius:50%;background:var(--muted-foreground)}.dt-note-perception-dot.is-active{background:#36a375}
 .dt-note-perception-state{flex:1}.dt-note-perception-actions{display:flex;gap:6px;flex-wrap:wrap}.dt-note-perception button{padding:4px 8px;border-radius:5px;background:var(--muted);color:var(--foreground);font:inherit;cursor:pointer}.dt-note-perception button:disabled{opacity:.45;cursor:default}
 .dt-note-perception-details{margin-top:8px}.dt-note-perception-details summary{cursor:pointer;max-width:100%;overflow-wrap:anywhere}.dt-note-perception p{margin:8px 0 0}.dt-note-perception pre{white-space:pre-wrap;max-height:160px;overflow:auto;font:inherit}.dt-note-perception a{text-decoration:underline;margin-left:6px}.dt-note-perception-error{color:var(--destructive,#d54848)}
+
+.dt-note-perception-source{display:flex;align-items:center;gap:6px}.dt-note-perception-source select{max-width:260px;padding:4px 6px;border:1px solid var(--border);border-radius:5px;background:var(--background);color:var(--foreground);font:inherit}.dt-note-perception-source select:disabled{opacity:.45}

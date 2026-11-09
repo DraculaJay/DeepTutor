@@ -39,7 +39,7 @@ class DeskmateService(OrchestrationService):
         self._question_session_id = ""
         self.snapshot = {'scene': 'other', 'session_id': session_id, 'timestamp': None,
                          'foreground_application': {}, 'latest_observation': '', 'recent_transcript': '',
-                         'latest_keyframe': None, 'course': None}
+                         'latest_keyframe': None, 'course': None, 'capture_source': {'id': 0, 'label': '整个屏幕'}}
         existing_courses = courses.sessions()
         if existing_courses:
             course = existing_courses[0]
@@ -122,6 +122,34 @@ class DeskmateService(OrchestrationService):
             await self.events.publish(Event('command.completed', {'command': method, 'result': result}))
             return result
         return await super().command(method, arguments)
+
+    async def select_capture_source(self, window_id):
+        sources = (await self.native_client.request('capture_sources', {}))['sources']
+        source = next((item for item in sources if item['id'] == window_id), None)
+        if source is None:
+            raise ValueError('窗口已关闭或不可用，请刷新窗口列表。')
+        await self.native_client.request('capture_select', {'window_id': window_id})
+        self.capture_ready = False
+        self.snapshot.update(capture_source=source, timestamp=None, latest_observation='')
+        # Do not enable asking until a frame from the selected source has arrived.
+        try:
+            async with asyncio.timeout(5):
+                while True:
+                    try:
+                        reply = await self.native_client.request('snapshot', {})
+                        frame = json.loads(reply['text'])
+                        if frame.get('source_id') == window_id:
+                            break
+                    except RuntimeError as exc:
+                        if 'No captured frame yet' not in str(exc):
+                            raise
+                    await asyncio.sleep(.1)
+        except TimeoutError as exc:
+            self.error = '未收到所选窗口的画面，请确认窗口仍打开，然后停止并重新启动感知。'
+            raise RuntimeError(self.error) from exc
+        self.capture_ready = True
+        self.error = ''
+        return source
 
     async def _on_native_event(self, payload):
         topic = payload.get('type')
@@ -404,7 +432,7 @@ def note_perception_context(note_document_id):
     if not service or not service.native_connected or not service.matches_context(note_document_id=note_document_id):
         return ''
     snapshot = service.snapshot
-    data = {k: snapshot.get(k) for k in ('note_document_id', 'note_title', 'timestamp', 'foreground_application', 'scene')}
+    data = {k: snapshot.get(k) for k in ('note_document_id', 'note_title', 'timestamp', 'foreground_application', 'capture_source', 'scene')}
     data['learning_context'] = service.learning_context
     data.update(capture_ready=service.capture_ready, system_audio_ready=service.system_audio_ready,
                 latest_observation=snapshot.get('latest_observation', '')[:1200],

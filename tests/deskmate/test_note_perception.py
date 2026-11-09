@@ -74,3 +74,48 @@ async def test_native_context_ack_and_wire_keep_utf8_json(monkeypatch):
     assert frames[0].message_type == MessageType.LEARNING_CONTEXT
     assert json.loads(frames[0].payload)['note_title'] == '矩阵'
     assert result['context_revision'] == 7
+
+
+@pytest.mark.asyncio
+async def test_window_selection_waits_for_new_pixels_and_rejects_other_note(tmp_path, monkeypatch):
+    from fastapi import HTTPException
+    from deeptutor.api.routers import deskmate as router
+
+    class WindowNative(ContextNative):
+        selected = 0
+        reads = 0
+        async def request(self, method, payload):
+            if method == 'capture_sources':
+                return {'sources': [{'id': 0, 'label': '整个屏幕'}, {'id': 7391, 'label': 'Chrome — lesson'}]}
+            if method == 'capture_select':
+                self.selected = payload['window_id']
+                self.reads = 0
+                return {'ok': True}
+            if method == 'snapshot':
+                self.reads += 1
+                return {'text': json.dumps({'source_id': 0 if self.reads == 1 else self.selected})}
+            return await super().request(method, payload)
+
+    native = WindowNative()
+    service = DeskmateService(native, HostCourses(TimedMediaStore(tmp_path / 'media'), 'capture'), 'capture', note_document_id='12345678')
+    monkeypatch.setattr(router, 'current_service', lambda: service)
+    await service.start()
+    try:
+        service.snapshot.update(latest_observation='old screen', timestamp='old')
+        response = await router.select_capture_source(router.CaptureSourceRequest(note_document_id='12345678', window_id=7391))
+        assert response['capture_ready']
+        assert native.reads == 2  # An old source frame must not enable asking.
+        assert service.snapshot['capture_source']['id'] == 7391
+        assert not service.snapshot['latest_observation']
+        assert service.snapshot['timestamp'] is None
+        with pytest.raises(HTTPException) as denied:
+            await router.select_capture_source(router.CaptureSourceRequest(note_document_id='87654321', window_id=0))
+        assert denied.value.status_code == 409
+        assert native.selected == 7391
+        with pytest.raises(ValueError, match='刷新'):
+            await service.select_capture_source(9999)
+        assert native.selected == 7391  # A stale list selection preserves the current source.
+        await service.select_capture_source(0)
+        assert service.snapshot['capture_source']['id'] == 0
+    finally:
+        await service.stop()
